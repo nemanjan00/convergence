@@ -36,21 +36,35 @@ anything, every field annotated with where it came from.
 
 ## Status
 
-Working reference slice (in-process, offline): config, block-contract envelopes,
-entity store with provenance merge, a bounded-concurrency runtime with sift
-guards and `queue-promised` rate limiting, and a runnable demo.
+Working reference implementation (in-process, offline): config, block-contract
+envelopes, entity store with provenance merge, a bounded-concurrency runtime
+with sift guards and `queue-promised` rate limiting, a **YAML→flow loader**
+(template compilation + full spec validation) so the contract is executable, and
+the recon **toolkit ported** into contract-ready services/utils.
 
 ```bash
 yarn install
-yarn demo     # composes 4 blocks -> one host entity per cert, fully provenanced
-yarn test     # 15 tests
+yarn flow     # loads, validates, and RUNS examples/flows/ct-recon.yaml
+yarn demo     # same pipeline built programmatically
+yarn test     # 52 tests
 yarn lint
 ```
 
-Next milestones: YAML→flow loader (compile `{{ }}` templates + spec validation),
-streaming/queue substrate for unbounded sources, the MCP interface, real blocks
-(CT-log source, rdap, asn, dns, wappalyzer), and the qrp flow builder. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+`yarn flow` parses the real YAML, validates it (ids, entities, for_each
+producers, cycles, sift shape, template paths), compiles `{{ }}` templates, and
+executes it — three certs in, the pre-cert dropped by `filter:`, two
+fully-provenanced host entities out.
+
+Ported toolkit (see [`docs/BLOCK_CONTRACT.md`](docs/BLOCK_CONTRACT.md)):
+`balancer`, `ip`, `subnet`, `geo`, `retry`, `random-ip`, `useragent`,
+`dns-cache`, `cache` (redis/in-memory), `resolver`, `dns-picker`, `asn`, `rdap`,
+`ip-lookup`, `ip-country`.
+
+Next milestones: wrap those services as real contract blocks + a live
+`source.ct-log`; the streaming/queue substrate for unbounded sources; the MCP
+interface; and the qrp flow builder. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+[`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
 
 ## Docs
 

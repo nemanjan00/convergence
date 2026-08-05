@@ -157,7 +157,16 @@ const createRuntime = () => {
 			}, capacity);
 
 			return flow.source.pull().then((items) => {
-				return Promise.all(items.map((item) => {
+				// Source-level relevance gate: drop non-matching items before
+				// they cost anything downstream (sift, same dialect as `when`).
+				const filtered = items.filter((item) => {
+					const ctx = {};
+					ctx[flow.source.emits] = item;
+
+					return passesWhen(flow.source.filter, ctx);
+				});
+
+				return Promise.all(filtered.map((item) => {
 					return boundedProcess(item);
 				}));
 			});
