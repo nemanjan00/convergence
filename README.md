@@ -1,0 +1,59 @@
+# recon-flow
+
+Repeatable agentic recon. **An AI composes the dataflow; a deterministic runtime
+executes it.** The AI never runs the conveyor belt — it only designs the machine.
+
+## Why
+
+LLM agents skip steps, forget across compaction, can't sustain high throughput,
+and don't persist. So we don't let them execute. They author a declarative flow
+(high-level, story-like verbs); the runtime does the running — with retries,
+rate limits, backpressure, dedup, and provenance handled once, for all flows.
+
+Think **Terraform's authoring & state model + GNU Radio's streaming execution**,
+for large-scale reconnaissance. Not n8n: n8n passes opaque JSON between nodes and
+has no domain-entity model. Our moat is **entity resolution with provenance** —
+many blocks converge into one `host` / `person` / `domain` / `webpage` /
+anything, every field annotated with where it came from.
+
+## Interfaces
+
+- **AI → MCP**: list blocks, compose a flow, validate, submit, inspect results.
+- **Human → Flow Builder**: a visual editor over the same YAML (single source of
+  truth). Planned frontend: [`qrp`](https://www.npmjs.com/package/@nemanjan00/qrp),
+  bundled with esbuild.
+
+## Data plane
+
+- **Flows**: YAML — declarative, diffable, versioned. See
+  [`docs/FLOW_SPEC.md`](docs/FLOW_SPEC.md) (the contract).
+- **Entities**: MongoDB. Schemaless documents, merged by identity, per-field
+  provenance.
+- **Blocks**: a push/pull service contract. See
+  [`docs/BLOCK_CONTRACT.md`](docs/BLOCK_CONTRACT.md).
+- **Predicates**: Mongo-style queries (via `sift`) for `when:`/`filter:` —
+  declarative in YAML, identical against Mongo.
+
+## Status
+
+Working reference slice (in-process, offline): config, block-contract envelopes,
+entity store with provenance merge, a bounded-concurrency runtime with sift
+guards and `queue-promised` rate limiting, and a runnable demo.
+
+```bash
+yarn install
+yarn demo     # composes 4 blocks -> one host entity per cert, fully provenanced
+yarn test     # 15 tests
+yarn lint
+```
+
+Next milestones: YAML→flow loader (compile `{{ }}` templates + spec validation),
+streaming/queue substrate for unbounded sources, the MCP interface, real blocks
+(CT-log source, rdap, asn, dns, wappalyzer), and the qrp flow builder. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Docs
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [Flow spec (the contract)](docs/FLOW_SPEC.md)
+- [Block contract](docs/BLOCK_CONTRACT.md)
