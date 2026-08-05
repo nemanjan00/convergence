@@ -1,16 +1,30 @@
-// Built-in block registry. Each block module exports { uses, rate, handler };
-// this collects them and can register them all into a runtime in one call, so a
-// flow's `uses:` names resolve to real handlers.
+// Block registry. Each block is a SELF-CONTAINED module ({ uses, rate, handler })
+// that owns its external dependencies. Blocks are loaded TOLERANTLY: if a block
+// can't be required (e.g. an optional external dep like node-rdap-lacnic isn't
+// installed), it is skipped with a warning instead of breaking the whole
+// registry — a missing dep disables only that one block.
 //
-// Register your own blocks the same way, or call runtime.registerBlock directly.
+// register() wires every loaded block into a runtime; a flow's `uses:` names
+// then resolve to real handlers.
 
-const enrichCountry = require("./enrich-country");
-const enrichJs = require("./enrich-js");
-
-const BUILTIN = [
-	enrichCountry,
-	enrichJs
+// Paths of built-in block modules. Add new blocks here (or, later, discover
+// them from a plugins directory / installed packages).
+const BLOCK_MODULES = [
+	"./ip-country",
+	"./js"
 ];
+
+const load = (modulePath) => {
+	try {
+		return require(modulePath);
+	} catch (error) {
+		console.error("block failed to load (skipped): " + modulePath + " — " + error.message);
+
+		return null;
+	}
+};
+
+const BUILTIN = BLOCK_MODULES.map(load).filter(Boolean);
 
 const blocks = {
 	all: () => {
@@ -28,7 +42,7 @@ const blocks = {
 		return map;
 	},
 
-	// Register every built-in block into a runtime instance.
+	// Register every loaded block into a runtime instance.
 	register: (runtime) => {
 		blocks.all().forEach((block) => {
 			runtime.registerBlock(block.uses, block.handler, {

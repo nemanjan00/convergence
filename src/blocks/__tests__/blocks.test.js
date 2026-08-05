@@ -8,18 +8,18 @@ describe("built-in blocks", () => {
 	});
 
 	it("exposes a uses -> block map", () => {
-		expect(blocks.allMap()["enrich.country"]).toBeDefined();
+		expect(blocks.allMap()["ip.country"]).toBeDefined();
 	});
 
-	it("enrich.country attaches country_code from an IP, offline", () => {
-		return blocks.allMap()["enrich.country"].handler({ ip: "93.184.216.34" })
+	it("ip.country attaches country_code from an IP, offline", () => {
+		return blocks.allMap()["ip.country"].handler({ ip: "93.184.216.34" })
 			.then((fields) => {
 				expect(fields.country_code).toBe("US");
 			});
 	});
 
-	it("enrich.country returns no fields for an unknown IP", () => {
-		return blocks.allMap()["enrich.country"].handler({ ip: "1.2.3.4" })
+	it("ip.country returns no fields for an unknown IP", () => {
+		return blocks.allMap()["ip.country"].handler({ ip: "1.2.3.4" })
 			.then((fields) => {
 				expect(fields).toEqual({});
 			});
@@ -41,7 +41,7 @@ describe("built-in blocks", () => {
 			blocks: [
 				{
 					id: "country",
-					uses: "enrich.country",
+					uses: "ip.country",
 					inputs: (ctx) => ({ ip: ctx.seed.ip }),
 					mergeInto: "host"
 				}

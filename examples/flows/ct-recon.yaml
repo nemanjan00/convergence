@@ -25,7 +25,7 @@ sources:
 blocks:
   # Resolve first: establishes host identity (ip) for everything downstream.
   - id: resolve
-    uses: enrich.dns-a
+    uses: dns.a
     for_each: cert
     when:
       cert.san.0: { $exists: true }
@@ -35,7 +35,7 @@ blocks:
 
   # RDAP registrar/abuse info, keyed onto the same host.
   - id: whois
-    uses: enrich.rdap
+    uses: rdap
     for_each: cert
     inputs:
       domain: "{{ cert.san[0] }}"
@@ -45,7 +45,7 @@ blocks:
 
   # Port scan — only once we have an IP (for_each host, guarded on ip).
   - id: scan
-    uses: enrich.nmap
+    uses: port.scan
     for_each: host
     when:
       host.ip: { $ne: null }
@@ -58,7 +58,7 @@ blocks:
 
   # Grab the page title, only if a web port is open.
   - id: title
-    uses: enrich.http-title
+    uses: http.title
     for_each: host
     when:
       host.open_ports: { $in: [80, 443] }

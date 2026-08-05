@@ -28,10 +28,10 @@ const fakeCtSource = () => {
 };
 
 const runtime = runtimeFactory.create();
-runtime.registerBlock("enrich.dns-a", demoBlocks.dnsA);
-runtime.registerBlock("enrich.rdap", demoBlocks.rdap, { maxConcurrent: 5 });
-runtime.registerBlock("enrich.nmap", demoBlocks.nmap, { maxConcurrent: 10 });
-runtime.registerBlock("enrich.http-title", demoBlocks.httpTitle);
+runtime.registerBlock("dns.a", demoBlocks.dnsA);
+runtime.registerBlock("rdap", demoBlocks.rdap, { maxConcurrent: 5 });
+runtime.registerBlock("port.scan", demoBlocks.nmap, { maxConcurrent: 10 });
+runtime.registerBlock("http.title", demoBlocks.httpTitle);
 
 const flow = loader.load(yamlString, { sourcePull: fakeCtSource });
 

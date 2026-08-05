@@ -13,10 +13,10 @@ const store = require("../src/services/store");
 
 const runtime = runtimeFactory.create();
 
-runtime.registerBlock("enrich.dns-a", demoBlocks.dnsA);
-runtime.registerBlock("enrich.rdap", demoBlocks.rdap, { maxConcurrent: 5 });
-runtime.registerBlock("enrich.nmap", demoBlocks.nmap, { maxConcurrent: 10 });
-runtime.registerBlock("enrich.http-title", demoBlocks.httpTitle);
+runtime.registerBlock("dns.a", demoBlocks.dnsA);
+runtime.registerBlock("rdap", demoBlocks.rdap, { maxConcurrent: 5 });
+runtime.registerBlock("port.scan", demoBlocks.nmap, { maxConcurrent: 10 });
+runtime.registerBlock("http.title", demoBlocks.httpTitle);
 
 const flow = {
 	name: "ct-recon",
@@ -35,26 +35,26 @@ const flow = {
 	blocks: [
 		{
 			id: "resolve",
-			uses: "enrich.dns-a",
+			uses: "dns.a",
 			inputs: (ctx) => ({ name: ctx.cert.san[0] }),
 			mergeInto: "host"
 		},
 		{
 			id: "whois",
-			uses: "enrich.rdap",
+			uses: "rdap",
 			inputs: (ctx) => ({ domain: ctx.cert.san[0] }),
 			mergeInto: "host"
 		},
 		{
 			id: "scan",
-			uses: "enrich.nmap",
+			uses: "port.scan",
 			when: { "host.ip": { $ne: null } },
 			inputs: (ctx) => ({ target: ctx.host.ip, args: "-sV --top-ports 100" }),
 			mergeInto: "host"
 		},
 		{
 			id: "title",
-			uses: "enrich.http-title",
+			uses: "http.title",
 			when: { "host.open_ports": { $in: [80, 443] } },
 			inputs: (ctx) => ({ url: "https://" + ctx.host.ip }),
 			mergeInto: "host"

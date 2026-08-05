@@ -23,13 +23,13 @@ const buildFlow = () => {
 		blocks: [
 			{
 				id: "resolve",
-				uses: "enrich.dns-a",
+				uses: "dns.a",
 				inputs: (ctx) => ({ name: ctx.cert.san[0] }),
 				mergeInto: "host"
 			},
 			{
 				id: "scan",
-				uses: "enrich.nmap",
+				uses: "port.scan",
 				when: { "host.ip": { $ne: null } },
 				inputs: (ctx) => ({ target: ctx.host.ip }),
 				mergeInto: "host"
@@ -46,8 +46,8 @@ describe("runtime", () => {
 	it("fans multiple blocks into one entity with provenance", () => {
 		const runtime = runtimeFactory.create();
 
-		runtime.registerBlock("enrich.dns-a", constantBlock({ ip: "1.2.3.4" }));
-		runtime.registerBlock("enrich.nmap", constantBlock({ open_ports: [80, 443] }));
+		runtime.registerBlock("dns.a", constantBlock({ ip: "1.2.3.4" }));
+		runtime.registerBlock("port.scan", constantBlock({ open_ports: [80, 443] }));
 
 		return runtime.run(buildFlow()).then(() => {
 			const hosts = store.all("host");
@@ -64,8 +64,8 @@ describe("runtime", () => {
 		const runtime = runtimeFactory.create();
 
 		// dns-a produces no ip, so scan's guard { host.ip: {$ne:null} } fails.
-		runtime.registerBlock("enrich.dns-a", constantBlock({ note: "no-ip" }));
-		runtime.registerBlock("enrich.nmap", constantBlock({ open_ports: [80] }));
+		runtime.registerBlock("dns.a", constantBlock({ note: "no-ip" }));
+		runtime.registerBlock("port.scan", constantBlock({ open_ports: [80] }));
 
 		return runtime.run(buildFlow()).then(() => {
 			const hosts = store.all("host");

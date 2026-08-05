@@ -1,4 +1,4 @@
-// Script block: block.js — run a snippet of JavaScript as a transform. The
+// Script block: js — run a snippet of JavaScript as a transform. The
 // snippet gets the stdlib helpers (ip, subnet, geo, balancer) as
 // globals plus `input` (its resolved inputs, minus `code`), and returns the
 // fields to merge. This is the escape hatch for logic that isn't worth a
@@ -20,7 +20,7 @@ const stdlib = require("../../stdlib");
 const TIMEOUT_MS = 1000;
 
 module.exports = {
-	uses: "block.js",
+	uses: "js",
 	rate: {},
 	handler: (input) => {
 		const code = input.code;
@@ -28,7 +28,7 @@ module.exports = {
 		delete data.code;
 
 		if (!code) {
-			return Promise.reject(new Error("block.js requires an `code` input"));
+			return Promise.reject(new Error("js block requires a `code` input"));
 		}
 
 		// stdlib helpers as globals + the resolved inputs as `input`.

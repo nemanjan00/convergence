@@ -110,7 +110,7 @@ A block consumes items from one stream and contributes fields to an entity.
 ```yaml
 blocks:
   - id: resolve                  # unique within the flow
-    uses: enrich.dns-a           # a registered block type
+    uses: dns.a           # a registered block type
     for_each: cert               # input stream: items of this entity type
     when:                        # OPTIONAL sift guard, evaluated per item
       cert.san.0: { $exists: true }
