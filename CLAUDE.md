@@ -33,23 +33,28 @@ come from there and are considered binding for this codebase.
 
 ## Layout
 
-- `src/config` — env-backed config.
-- `src/utils/*` — spec/plumbing + reusable helpers: `envelope`, `load`,
-  `balancer`, `ip` (address framework incl. `random`/`randomFrom`), `subnet`,
-  `geo`, `retry`, `useragent`, `dns-cache`. Not app logic.
-- `src/services/*` — anything talking to an external service (or the store);
-  named by function: `store`, `cache`, `resolver`, `dns-picker`, `asn`, `rdap`,
-  `ip-lookup`, `ip-country`.
+- `src/config` — env-backed config (PORT, MONGO_URL/DB, MONITOR_CRON, …).
+- `src/utils/*` — spec/plumbing + reusable pure/node helpers: `envelope`, `load`,
+  `template`, `balancer`, `ip`, `subnet`, `geo`, `retry`, `useragent`,
+  `dns-cache`, `tls-fingerprint`, `ja3`, `host` (input normalize). Not app logic.
+- `src/services/*` — anything talking to an external service (or the store):
+  `store`, `cache`, `resolver`, `dns-picker`, `asn`, `rdap`, `ip-lookup`,
+  `ip-country`, `crtsh`, `certspotter`, `http` (impersonating egress),
+  `persistence` (mongo), `journal` (execution log), `playbooks` (lifecycle).
 - `src/blocks/*` — the block library (67 blocks, one folder each). Full catalog
   in `docs/BLOCKS.md`; the registry (`src/blocks/index.js`) is the source of truth.
 - `src/sources/*` — input sources (ct-log, list, webhook, tick).
-- `data/*` — bundled dataset stubs (see `docs/DATA_SOURCES.md`).
+- `src/samples` — bundled example flows as importable playbook artifacts.
 - `src/engine` — the deterministic executor (entity-state fixpoint, bounded
   concurrency, sift guards, provenance merge, lineage edges, execution journal).
-- `bin/*.js` — entrypoints: `run.js` (`yarn flow`), `export.js`, `mcp.mjs`,
-  `monitor.js`, `build-frontend.js`. Prod under `forever`, dev under `nodemon`.
+- `src/mcp` — AI-facing capability layer (pure); `src/api` — express REST over it
+  + services; `src/index.js` — the served app (`yarn web`): API + UI + scheduler.
+- `data/*` — bundled dataset stubs (see `docs/DATA_SOURCES.md`).
+- `bin/*.js` — entrypoints: `run.js` (`yarn flow`), `export.js`, `monitor.js`
+  (`yarn monitor` / `yarn playbooks`), `build-frontend.js`, `mcp.mjs` (`yarn mcp`,
+  an HTTP client of the app). Prod under `forever`, dev under `nodemon`.
 - `docs/` — `ARCHITECTURE.md`, `FLOW_SPEC.md` (the contract), `BLOCK_CONTRACT.md`,
-  `BLOCKS.md` (block catalog).
+  `DATA_MODEL.md`, `EGRESS.md`, `DATA_SOURCES.md`, `BLOCKS.md` (block catalog).
 - `examples/flows/*.yaml` — canonical flows.
 
 ## Key decisions (keep in sync as they land)

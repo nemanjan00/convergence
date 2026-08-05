@@ -78,17 +78,37 @@ That merge-with-provenance is the hard, defensible core.
 
 ## Interfaces
 
-- **AI → MCP.** The agent speaks MCP: list blocks, compose a flow, validate,
-  submit, inspect state/results. It emits YAML; it does not run anything.
-- **Human → Flow Builder.** A visual editor over the same YAML. The YAML is the
-  single source of truth both sides read and write. Round-trips must be
-  lossless.
+One long-running **app** (`src/index.js`, `yarn web`) owns the state and serves
+a REST API + the UI; both surfaces below talk to it, so they drive the *same*
+running state:
+
+- **AI → MCP.** `bin/mcp.mjs` is an MCP stdio server that is a thin **HTTP client
+  of the app's API** (`CONVERGENCE_URL`): list blocks, validate/run flows, query
+  entities, manage playbooks. The agent emits YAML; it does not run anything.
+- **Human → Web UI.** The `qrp` frontend the app serves (entity explorer, node
+  canvas, discovery graph, Executions log, Playbooks) fetching `/api/snapshot`.
+  Flow YAML is the single source of truth both sides read and write.
+
+## The served app (runtime)
+
+- **`src/api`** (express) — REST over the capability layer + services: blocks,
+  snapshot, flow validate/run, entity query, executions, inbound webhook, and
+  playbook CRUD + lifecycle. Always JSON.
+- **`src/index.js`** — boots it: hydrate from Mongo → listen → run the scheduler
+  (every *active* playbook on `MONITOR_CRON`, persisting each pass) → graceful
+  shutdown. The single stateful process.
+- **Execution journal** (`src/services/journal`) — every block execution
+  recorded (input/output/changed/timing/status) for the Executions panel;
+  Mongo-persistable.
+- **Playbooks** (`src/services/playbooks`) — saved flows with a
+  `draft → active → paused` lifecycle; export/import as portable artifacts.
 
 ## Data plane
 
 - **Flow definition:** YAML. Human-readable, diffable, version-controlled.
-- **Data / entities:** MongoDB cluster. Entities are documents; provenance is
-  embedded or referenced.
+- **Data / entities:** MongoDB. Entities are documents merged by identity with
+  per-field provenance; lineage recorded as first-class edges. Working set is
+  in-memory, hydrated/persisted to Mongo (a Mongo-native store is the scale path).
 - **Services (blocks):** a standard **ingest push/pull** contract. A block is
   any service that conforms to it — language-agnostic, independently scalable.
 
@@ -112,14 +132,24 @@ and parallel contributors rarely collide (each block is its own folder):
 Enforced by a guard test (`src/stdlib/__tests__`) that fails if stdlib
 transitively loads a server-only dependency.
 
-## Open questions (decide before building)
+## Decided / open
 
-1. **Block contract wire format** — the exact push/pull envelope + provenance
-   fields. Everything else depends on this.
-2. **Entity schema & merge rules** — what makes two `host`s the same host? What
-   wins on conflict?
-3. **Runtime substrate** — queue/stream tech (Kafka? NATS? Redis streams?) for
-   backpressured week-long flows.
-4. **Backpressure semantics** — what happens when nmap can't keep up with the CT
-   firehose? Drop, buffer, sample, or slow the source?
-5. **Naming.**
+Resolved (see the linked docs):
+
+- **Block contract & envelope** — [`BLOCK_CONTRACT.md`](BLOCK_CONTRACT.md).
+- **Entity identity & merge rules** — [`DATA_MODEL.md`](DATA_MODEL.md) (keyed by
+  identity fields; default monotonic first-write-wins-with-provenance).
+- **Naming** — convergence.
+
+Still open (bigger bets, not yet built):
+
+1. **Runtime substrate at scale** — the current engine is an in-process
+   fixpoint; a queue/stream substrate (Kafka? NATS? Redis streams?) is the path
+   for backpressured, week-long, multi-node flows.
+2. **Backpressure semantics** — when a slow block can't keep up with a source
+   firehose: drop, buffer, sample, or slow the source?
+3. **Mongo-native store** — query millions of entities directly (the explorer's
+   data source at scale) rather than a working-set-in-memory + snapshot.
+4. **Parent references** — reach a derived entity's ancestors (via lineage
+   edges) from `inputs`/`when`/`filter`.
+5. **AuthN/Z** on the served API.
