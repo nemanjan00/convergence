@@ -8,7 +8,19 @@ const SERVER_ONLY = ["ioredis", "mongodb", "mongoose", "got-verbose", "got"];
 
 describe("stdlib (frontend-safe surface)", () => {
 	it("exposes exactly the curated helpers", () => {
-		expect(Object.keys(stdlib).sort()).toEqual(["balancer", "geo", "ip", "subnet"]);
+		expect(Object.keys(stdlib).sort()).toEqual(["balancer", "geo", "ip", "mmh3", "subnet"]);
+	});
+
+	// Known Python-mmh3 / Shodan vectors — mmh3 must match bit-for-bit so a
+	// favicon_hash we compute equals one from a `http.favicon.hash:` query.
+	it("mmh3 matches canonical MurmurHash3 x86_32 vectors", () => {
+		expect(stdlib.mmh3("")).toBe(0);
+		expect(stdlib.mmh3("foo")).toBe(-156908512);
+		expect(stdlib.mmh3("hello")).toBe(613153351);
+	});
+
+	it("mmh3 hashes Buffers identically to their string form", () => {
+		expect(stdlib.mmh3(Buffer.from("hello", "utf8"))).toBe(stdlib.mmh3("hello"));
 	});
 
 	it("does not transitively load any server-only dependency", () => {

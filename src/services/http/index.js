@@ -47,6 +47,8 @@ const http = {
 			timeout: { request: opts.timeout || DEFAULT_TIMEOUT_MS },
 			followRedirect: true,
 			throwHttpErrors: false,
+			// "buffer" for binary bodies (e.g. favicons); default is the string body.
+			responseType: opts.responseType === "buffer" ? "buffer" : "text",
 			retry: { limit: opts.retry || 0 }
 		}).then((response) => {
 			return {
