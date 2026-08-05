@@ -1,5 +1,5 @@
 const blocks = require("../index");
-const runtimeFactory = require("../../runtime");
+const engineFactory = require("../../engine");
 const store = require("../../services/store");
 
 describe("built-in blocks", () => {
@@ -25,15 +25,16 @@ describe("built-in blocks", () => {
 			});
 	});
 
-	it("registers into a runtime and runs in a flow", () => {
-		const runtime = runtimeFactory.create();
-		blocks.register(runtime);
+	it("registers into the engine and runs in a flow", () => {
+		const engine = engineFactory.create();
+		blocks.register(engine);
 
 		const flow = {
 			name: "country-test",
 			entities: { host: { key: ["ip"], merge: "last-write-wins-with-provenance" } },
 			source: {
-				emits: "seed",
+				id: "seed",
+				emits: "host",
 				pull: () => {
 					return Promise.resolve([{ ip: "93.184.216.34" }]);
 				}
@@ -42,13 +43,14 @@ describe("built-in blocks", () => {
 				{
 					id: "country",
 					uses: "ip.country",
-					inputs: (ctx) => ({ ip: ctx.seed.ip }),
+					forEach: "host",
+					inputs: (ctx) => ({ ip: ctx.host.ip }),
 					mergeInto: "host"
 				}
 			]
 		};
 
-		return runtime.run(flow).then(() => {
+		return engine.run(flow).then(() => {
 			const hosts = store.all("host");
 
 			expect(hosts).toHaveLength(1);

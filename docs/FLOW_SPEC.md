@@ -184,9 +184,10 @@ its own rate limiting.
 
 ### `emit` — spawning new work (advanced, v0-reserved)
 
-A block may spawn additional items/entities beyond its `merge_into` (e.g. one
-cert with 3 SANs emits 3 `domain` items). Shape reserved; documented once the
-fan-out semantics are pinned.
+Fan-out is a block that returns an **array** of field-sets (see the execution
+model): one `merge_into` entity per element. The built-in `fanout` block does
+this generically — `inputs: { items: "{{ cert.san }}", as: name }` yields one
+`host { name: <san> }` per SAN. No special source or `emit:` syntax needed.
 
 ## Provenance (automatic — never authored)
 
@@ -203,26 +204,32 @@ provenance:
 This is attached by the runtime on merge. It is the moat; it is not optional and
 not author-controlled.
 
-## Execution model (normative)
+## Execution model (normative) — convergence to a fixpoint
 
-1. Sources produce entity items onto named streams; `filter` drops
+1. Sources **seed** entities of type `emits` into the store; `filter` drops
    non-matching items immediately.
-2. Each block subscribes to its `for_each` stream. On each item it checks
-   `when`, resolves `inputs`, invokes the block type (respecting `rate`), and
-   merges returned fields into `merge_into` with provenance.
-3. Writing an entity places an updated item on that entity's stream, which may
-   trigger further blocks (`for_each: host`). Cycles are rejected at validation.
-4. Every edge is a **bounded queue**; a full queue back-pressures its producer,
-   ultimately slowing the source. Nothing is dropped except by explicit
-   `filter`/`when`.
-5. Work items are **idempotent by `item_id`**, so restarts resume without
-   double-writing. This is where week-long persistence comes from.
+2. The engine **sweeps** blocks. For each block, for each entity of its
+   `for_each` type it has not yet processed at that entity's current version, it
+   checks `when` against the entity's **current state**, resolves `inputs`,
+   invokes the block (respecting `rate`), and merges returned fields into
+   `merge_into` with provenance.
+3. A merge that **changes** an entity bumps that entity's version, which makes
+   dependent blocks eligible again. A block fires on the *data* — "port 50 open"
+   triggers its reaction no matter which of many blocks set it.
+4. Sweeps repeat until one produces **no change** — the fixpoint. Because a
+   no-op write (same value) does not bump the version, well-formed flows settle;
+   a `MAX_SWEEPS` backstop catches a block that never stabilises.
+5. Merges are **idempotent** (same value ⇒ no change ⇒ no re-fire), which is
+   what makes convergence terminate and restarts resume without double-writing.
 
-> **Reference implementation note.** The current `src/runtime` runs a
-> simplified *ordered pipeline per source item* rather than the full
-> stream-triggered graph above — enough to validate entities, provenance, sift
-> guards, and backpressure end-to-end. The stream/queue substrate is the next
-> milestone; this spec is the target, and the runtime converges to it.
+A block returns either one field-set (single merge) or an **array** of
+field-sets — a **fan-out**, one target entity per element. This is how the
+`fanout` block turns one `cert` into one `host` per SAN.
+
+> **Reference implementation.** `src/engine` implements this fixpoint in memory
+> (the semantic reference). The unbounded streaming substrate (per-edge bounded
+> queues, week-long runs, restart-resume) is a later milestone that converges to
+> the *same* fixpoint incrementally.
 
 ## Validation rules (a flow is rejected if…)
 

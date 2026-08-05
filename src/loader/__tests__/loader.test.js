@@ -21,15 +21,22 @@ describe("loader", () => {
 		});
 
 		expect(flow.name).toBe("ct-recon");
-		expect(flow.entities.host.key).toEqual(["ip"]);
+		expect(flow.entities.host.key).toEqual(["name"]);
 		expect(flow.source.emits).toBe("cert");
 
+		// fanout explodes cert.san into host names.
+		const fanoutBlock = flow.blocks.find((block) => {
+			return block.id === "fanout";
+		});
+		expect(fanoutBlock.inputs({ cert: { san: ["a.example.com", "b.example.com"] } }))
+			.toEqual({ items: ["a.example.com", "b.example.com"], as: "name" });
+
+		// resolve reads the host's own name (convergence-native).
 		const resolveBlock = flow.blocks.find((block) => {
 			return block.id === "resolve";
 		});
-		const inputs = resolveBlock.inputs({ cert: { san: ["a.example.com"] } });
-
-		expect(inputs).toEqual({ name: "a.example.com" });
+		expect(resolveBlock.inputs({ host: { name: "a.example.com" } }))
+			.toEqual({ name: "a.example.com" });
 	});
 
 	it("flags unknown apiVersion, missing entity, dangling for_each", () => {

@@ -24,7 +24,7 @@ const envelope = {
 		};
 	},
 
-	// Throws if a work item is missing required keys. Called by the runtime
+	// Throws if a work item is missing required keys. Called by the engine
 	// before dispatch so a malformed item never reaches block code.
 	assertWorkItem: (item) => {
 		const missing = REQUIRED_WORK_KEYS.filter((key) => {
@@ -58,7 +58,7 @@ const envelope = {
 		};
 	},
 
-	// Wrap a failure so the runtime can decide retry/drop without losing the
+	// Wrap a failure so the engine can decide retry/drop without losing the
 	// error. Errors are surfaced, not swallowed.
 	makeError: (workItem, error) => {
 		return {

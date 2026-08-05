@@ -1,17 +1,20 @@
 # Canonical example — see docs/FLOW_SPEC.md for the normative spec.
-# Watch CT transparency logs; enrich every new cert into a host entity.
-# Demonstrates: streaming source, sift filter/guards, fan-in with provenance,
-# for_each-driven DAG edges.
+# Certificate Transparency -> hosts, converged. The source emits `cert`
+# entities; a `fanout` block explodes each cert's SANs into `host` entities
+# (keyed by a stable name); everything else accumulates onto the host and fires
+# by CONVERGENCE — a block runs when the host's state satisfies its `when`,
+# regardless of which block produced that state.
 apiVersion: v0
 kind: Flow
 metadata:
   name: ct-recon
-  description: Enrich new certificates from CT logs into host entities.
+  description: CT certificates fanned into enriched host entities.
 
 entities:
+  cert:
+    key: [id]                          # a CT log entry
   host:
-    key: [ip]                          # same IP => same host
-    merge: last-write-wins-with-provenance
+    key: [name]                        # stable identity; ip/ports accumulate as fields
 
 sources:
   - id: ct
@@ -23,27 +26,38 @@ sources:
       cert.is_precert: false            # skip pre-certificates
 
 blocks:
-  # Resolve first: establishes host identity (ip) for everything downstream.
+  # Fan out: one cert -> one host per SAN.
+  - id: fanout
+    uses: fanout
+    for_each: cert
+    inputs:
+      items: "{{ cert.san }}"
+      as: name
+    merge_into: host
+
+  # Resolve until the host has an ip (guard makes it run once, then settle).
   - id: resolve
     uses: dns.a
-    for_each: cert
+    for_each: host
     when:
-      cert.san.0: { $exists: true }
+      host.ip: { $exists: false }
     inputs:
-      name: "{{ cert.san[0] }}"
+      name: "{{ host.name }}"
     merge_into: host
 
-  # RDAP registrar/abuse info, keyed onto the same host.
+  # RDAP registrar/abuse, once per host.
   - id: whois
     uses: rdap
-    for_each: cert
+    for_each: host
+    when:
+      host.registrar: { $exists: false }
     inputs:
-      domain: "{{ cert.san[0] }}"
+      domain: "{{ host.name }}"
     merge_into: host
     rate:
-      max_per_min: 60                   # RDAP is rate-limited
+      max_per_min: 60
 
-  # Port scan — only once we have an IP (for_each host, guarded on ip).
+  # Port scan — fires as soon as the host has an ip, no matter who set it.
   - id: scan
     uses: port.scan
     for_each: host
@@ -51,17 +65,16 @@ blocks:
       host.ip: { $ne: null }
     inputs:
       target: "{{ host.ip }}"
-      args: "-sV --top-ports 100"
     merge_into: host
     rate:
       max_concurrent: 10
 
-  # Grab the page title, only if a web port is open.
+  # Page title — fires once a web port is known to be open.
   - id: title
     uses: http.title
     for_each: host
     when:
       host.open_ports: { $in: [80, 443] }
     inputs:
-      url: "https://{{ host.ip }}"
+      url: "https://{{ host.name }}"
     merge_into: host

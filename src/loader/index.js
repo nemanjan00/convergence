@@ -1,11 +1,11 @@
 // Flow loader: turn the contract YAML (docs/FLOW_SPEC.md) into a validated,
-// runtime-ready flow. This is where the written contract becomes executable.
+// engine-ready flow. This is where the written contract becomes executable.
 //
 //   const flow = loader.load(yamlString, { sourcePull });
-//   runtime.run(flow);
+//   engine.run(flow);
 //
 // parse -> validate (collect every error) -> compile (templates + shape the
-// runtime consumes). The AI/flow-builder emit YAML; nothing here executes it.
+// engine consumes). The AI/flow-builder emit YAML; nothing here executes it.
 
 const yaml = require("js-yaml");
 const template = require("../utils/template");
@@ -177,7 +177,7 @@ const loader = {
 		return errors;
 	},
 
-	// Compile a (assumed valid) spec into the object src/runtime consumes.
+	// Compile a (assumed valid) spec into the flow object the engine consumes.
 	// options.sourcePull: () => Promise<item[]> bound to the single source.
 	compile: (spec, options) => {
 		const opts = options || {};

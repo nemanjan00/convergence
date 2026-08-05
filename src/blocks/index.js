@@ -10,6 +10,7 @@
 // Paths of built-in block modules. Add new blocks here (or, later, discover
 // them from a plugins directory / installed packages).
 const BLOCK_MODULES = [
+	"./fanout",
 	"./ip-country",
 	"./js"
 ];

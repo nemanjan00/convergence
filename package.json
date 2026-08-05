@@ -7,8 +7,6 @@
 	"scripts": {
 		"web": "forever src",
 		"watch": "nodemon src",
-		"demo": "node bin/demo.js",
-		"demo-watch": "nodemon bin/demo.js",
 		"flow": "node bin/run.js",
 		"flow-watch": "nodemon bin/run.js",
 		"lint": "eslint src/ bin/",

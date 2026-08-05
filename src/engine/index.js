@@ -109,24 +109,36 @@ const createEngine = () => {
 				input: block.inputs(ctx)
 			});
 
-			return registered.call(work.input).then((fields) => {
-				const result = envelope.makeResult(work, fields);
+			return registered.call(work.input).then((output) => {
 				const collection = flow.entities[block.mergeInto];
 
-				// Keep the merge keyed: seed identity from the target's current
-				// state (the triggering entity when merging into its own type).
+				// Keep merges keyed: seed identity from the target's current state
+				// (the triggering entity when merging into its own type).
 				const currentTarget = (block.mergeInto === block.forEach)
 					? flattenEntity(entity)
 					: {};
 				const seed = identityValues(collection.key, currentTarget);
-				const toMerge = Object.assign({}, seed, result.fields);
 
-				const merged = store.upsert(block.mergeInto, toMerge, result.provenance);
+				// A block returns either one field-set (single merge) or an ARRAY
+				// of field-sets — fan-out, one target entity per element (e.g. one
+				// cert -> one host per SAN). Each element carries its own key.
+				const batches = Array.isArray(output) ? output : [output];
+				let changed = false;
 
-				// A version advance for this identity means the entity changed.
-				const seenKey = block.mergeInto + "|" + merged._identity;
-				const changed = merged._version > (seen[seenKey] || 0);
-				seen[seenKey] = merged._version;
+				batches.forEach((fields) => {
+					const result = envelope.makeResult(work, fields);
+					const toMerge = Object.assign({}, seed, result.fields);
+					const merged = store.upsert(block.mergeInto, toMerge, result.provenance);
+
+					// A version advance for this identity means it changed.
+					const seenKey = block.mergeInto + "|" + merged._identity;
+
+					if (merged._version > (seen[seenKey] || 0)) {
+						changed = true;
+					}
+
+					seen[seenKey] = merged._version;
+				});
 
 				return changed;
 			});
