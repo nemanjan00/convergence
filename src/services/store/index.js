@@ -2,12 +2,21 @@
 // merges them into a single document keyed by identity, attaching provenance to
 // EVERY field so we can always answer "where did this claim come from?".
 //
+// Entities are namespaced PER PLAYBOOK via store.scope(playbookId): each
+// playbook converges into its OWN entity space, so two playbooks that discover
+// the same host/ip keep separate documents instead of merging into one shared
+// entity. The raw (unscoped) surface still exists for bare CLI/demo runs.
+//
 // Named for what it does (store entities), not how (mongo). This first
 // implementation is in-memory so the demo runs with no database.
 //
 // TODO(mongo): swap the in-memory `_collections` map for a real Mongo cluster
 //   (config MONGO_URL / MONGO_DB). The public surface (upsert/get/all) is the
 //   contract the rest of the system depends on and must not change.
+
+// Separator between a playbook id and an entity type in a namespaced collection
+// key (see store.scope). Playbook ids never contain it, so the split is exact.
+const NAMESPACE_SEP = "::";
 
 // Structural value equality — good enough for the JSON-shaped values blocks
 // produce (strings, numbers, arrays, plain objects).
@@ -293,12 +302,102 @@ const store = {
 		});
 	},
 
+	// Split a raw collection key back into { playbook, type }. A key with no
+	// namespace separator is a global (unscoped) type — { playbook: null, type }.
+	// The API uses this to tag each entity/edge with its producing playbook.
+	splitKey: (collectionKey) => {
+		const index = collectionKey.indexOf(NAMESPACE_SEP);
+
+		if (index === -1) {
+			return { playbook: null, type: collectionKey };
+		}
+
+		return {
+			playbook: collectionKey.slice(0, index),
+			type: collectionKey.slice(index + NAMESPACE_SEP.length)
+		};
+	},
+
 	// Test/demo helper: forget everything.
 	_reset: () => {
 		store._collections = {};
 		store._edges = [];
 
 		return store;
+	},
+
+	// Namespace the store to ONE playbook. Returns a facade with the same surface
+	// (define/upsert/get/all/allMap/addEdge/edges) that transparently prefixes
+	// entity types with `<playbook>::`, so two playbooks that both discover
+	// `host name="a.com"` keep SEPARATE documents instead of merging into one
+	// shared entity (the cross-playbook bleed). Reads strip the prefix back off so
+	// callers still work in bare type names; the raw singleton keeps the prefixed
+	// keys for persistence. A falsy playbook yields the unscoped store unchanged.
+	scope: (playbook) => {
+		if (!playbook) {
+			return store;
+		}
+
+		const prefix = playbook + NAMESPACE_SEP;
+		const ns = (type) => { return prefix + type; };
+		const strip = (type) => { return type.indexOf(prefix) === 0 ? type.slice(prefix.length) : type; };
+
+		// Rewrite typed-field `links` targets so auto-linking stays in-namespace.
+		const scopeOptions = (options) => {
+			const opts = options || {};
+
+			if (!opts.fields) {
+				return opts;
+			}
+
+			const fields = {};
+
+			Object.keys(opts.fields).forEach((name) => {
+				const spec = opts.fields[name];
+
+				if (spec && spec.links) {
+					fields[name] = Object.assign({}, spec, { links: ns(spec.links) });
+				} else {
+					fields[name] = spec;
+				}
+			});
+
+			return Object.assign({}, opts, { fields: fields });
+		};
+
+		const stripEdge = (edge) => {
+			return Object.assign({}, edge, {
+				from: Object.assign({}, edge.from, { type: strip(edge.from.type) }),
+				to: Object.assign({}, edge.to, { type: strip(edge.to.type) })
+			});
+		};
+
+		const scoped = {
+			define: (type, options) => { store.define(ns(type), scopeOptions(options)); return scoped; },
+			upsert: (type, fields, provenance) => { return store.upsert(ns(type), fields, provenance); },
+			get: (type, identity) => { return store.get(ns(type), identity); },
+			all: (type) => { return store.all(ns(type)); },
+			allMap: (type) => { return store.allMap(ns(type)); },
+			addEdge: (edge) => {
+				store.addEdge(Object.assign({}, edge, {
+					from: Object.assign({}, edge.from, { type: ns(edge.from.type) }),
+					to: Object.assign({}, edge.to, { type: ns(edge.to.type) })
+				}));
+
+				return scoped;
+			},
+			edges: (filter) => {
+				const f = filter || {};
+				const nf = Object.assign({}, f);
+
+				if (f.fromType) { nf.fromType = ns(f.fromType); }
+				if (f.toType) { nf.toType = ns(f.toType); }
+
+				return store.edges(nf).map(stripEdge);
+			}
+		};
+
+		return scoped;
 	}
 };
 

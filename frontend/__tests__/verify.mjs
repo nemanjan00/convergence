@@ -30,7 +30,9 @@ const data = {
 			{ type: "host", key: "name=\"a.example.com\"", version: 3, fields: { name: { value: "a.example.com", block: "fanout" }, ip: { value: "1.2.3.4", block: "resolve" } } },
 			{ type: "host", key: "name=\"b.example.com\"", version: 2, fields: { name: { value: "b.example.com", block: "fanout" } } }
 		],
-		cert: [ { type: "cert", key: "id=1", version: 1, fields: { id: { value: 1, block: "ct" } } } ]
+		cert: [ { type: "cert", key: "id=1", version: 1, fields: { id: { value: 1, block: "ct" } } } ],
+		// A phantom from ANOTHER playbook — must never surface in pb-1's workspace.
+		leak: [ { type: "leak", key: "ip=\"1.1.1.1\"", version: 1, playbook: "other-pb", fields: { ip: { value: "1.1.1.1", block: "x" } } } ]
 	},
 	edges: [ { from: { type: "cert", key: "id=1" }, rel: "has_san", to: { type: "host", key: "name=\"a.example.com\"" }, via: "fanout" } ],
 	// executions carry the playbook id (pb-1) so they scope to it on the page.
@@ -161,6 +163,10 @@ if (q(".tnode.tgroup").length < 1) { failures.push("explorer tree: no type group
 // every entity type should appear as a top-level group (incl. child-only types)
 if (!q(".tnode.tgroup .tbadge").some((b) => b.textContent === "host")) {
 	failures.push("explorer tree: 'host' type not shown at top level");
+}
+// per-playbook scoping: a 'leak' entity tagged to ANOTHER playbook must not show
+if (q(".tnode.tgroup .tbadge").some((b) => b.textContent === "leak")) {
+	failures.push("scoping: an entity from another playbook bled into this one");
 }
 // expand an entity that has lineage children
 const caret = q(".tnode:not(.tgroup) .caret").find((c) => c.textContent === "▸");

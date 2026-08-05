@@ -221,6 +221,29 @@ const emptyState = (icon, title, sub, action) => {
 };
 
 // The at-a-glance summary bar under the header: what the app currently knows.
+// Scope a snapshot to ONE playbook. Entities/edges/executions are tagged with
+// the playbook that produced them (the store namespaces per playbook), so a
+// playbook's Entities/Graph only ever show ITS discoveries — the fix for
+// phantom entities bleeding in from other playbooks' runs. Untagged rows (a
+// static local export with no playbook context) pass through unchanged.
+const scopeData = (data, playbook) => {
+	if (!playbook) { return data; }
+
+	const keep = (row) => { return !row.playbook || row.playbook === playbook; };
+	const entities = {};
+
+	Object.keys(data.entities || {}).forEach((type) => {
+		const rows = (data.entities[type] || []).filter(keep);
+		if (rows.length > 0) { entities[type] = rows; }
+	});
+
+	return Object.assign({}, data, {
+		entities: entities,
+		edges: (data.edges || []).filter(keep),
+		executions: (data.executions || []).filter(keep)
+	});
+};
+
 const statBar = (data, ui) => {
 	const entityCount = Object.keys(data.entities || {}).reduce((sum, type) => {
 		return sum + (data.entities[type] || []).length;
@@ -1543,8 +1566,8 @@ export const render = (root, data) => {
 	const views = {
 		playbooks: () => playbooksView(data, ui),
 		overview: () => playbookOverview(data, ui),
-		explorer: () => explorer(data, ui),
-		graph: () => graphView(data, ui),
+		explorer: () => explorer(scopeData(data, ui.openPlaybook), ui),
+		graph: () => graphView(scopeData(data, ui.openPlaybook), ui),
 		executions: () => executionsView(data, ui),
 		builder: () => builder(data, ui)
 	};
@@ -1552,8 +1575,8 @@ export const render = (root, data) => {
 	const SECTIONS = {
 		playbooks: { title: "Playbooks", sub: "all saved flows", ico: "▤" },
 		overview: { title: "Overview", sub: "this playbook's config + run summary", ico: "◎" },
-		explorer: { title: "Entities", sub: "discovered entities (global store)", ico: "▦" },
-		graph: { title: "Graph", sub: "discovery graph (global store)", ico: "◈" },
+		explorer: { title: "Entities", sub: "this playbook's discovered entities", ico: "▦" },
+		graph: { title: "Graph", sub: "this playbook's discovery graph", ico: "◈" },
 		executions: { title: "Executions", sub: "this playbook's block runs", ico: "≡" },
 		builder: { title: "Flow", sub: "the flow as a node graph", ico: "⚙" }
 	};
@@ -1629,10 +1652,10 @@ export const render = (root, data) => {
 		return el("div", { style: "display:flex;flex-direction:column;gap:2px" },
 			el("div", { class: "section-title" }, crumb),
 			el("div", { class: "section-sub" }, meta.sub));
-	}, statBar(data, ui));
+	}, statBar(scopeData(data, ui.openPlaybook), ui));
 
 	const main = el("main", { class: "main" }, topbar,
-		el("div", {}, when(() => ui.view, (view) => (views[view] || views.playbooks)())));
+		el("div", {}, when(() => (ui.openPlaybook || "") + "|" + ui.view, () => (views[ui.view] || views.playbooks)())));
 
 	// Overlay: modal keyed on its IDENTITY (so editing inside it doesn't rebuild
 	// and drop input focus); toast is frame-reactive (set/cleared transiently).

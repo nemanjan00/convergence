@@ -53,7 +53,10 @@ const mcp = {
 	// the TQL/Live-Tables analog. Returns a { columns, rows, row_count } table.
 	queryEntities: (args) => {
 		const opts = args || {};
-		const rows = store.all(opts.entityType).map(rowOf);
+		// Scope to one playbook when asked (its own entity namespace); otherwise
+		// query the raw store (bare types, all playbooks).
+		const db = opts.playbook ? store.scope(opts.playbook) : store;
+		const rows = db.all(opts.entityType).map(rowOf);
 		const predicate = opts.query ? sift(opts.query) : () => true;
 		const matched = rows.filter(predicate);
 
@@ -98,17 +101,20 @@ const mcp = {
 
 		const flow = loader.load(yamlString, { sourcePull: pull });
 
-		// Tag the run with its playbook so journal entries can be re-run later.
+		// Tag the run with its playbook so journal entries can be re-run later, and
+		// so the store namespaces this flow's entities to it (no cross-bleed).
 		if (opts.playbookId) { flow._playbook = opts.playbookId; }
+
+		const db = store.scope(flow._playbook);
 
 		return engine.run(flow).then(() => {
 			const entities = {};
 
 			Object.keys(flow.entities).forEach((type) => {
-				entities[type] = store.all(type).map(rowOf);
+				entities[type] = db.all(type).map(rowOf);
 			});
 
-			return { flow: flow.name, entities: entities, edges: store.edges() };
+			return { flow: flow.name, entities: entities, edges: db.edges() };
 		});
 	},
 

@@ -51,6 +51,13 @@ const identityValues = (keyFields, flat) => {
 	return seed;
 };
 
+// The store this flow works against: namespaced to its playbook so a playbook's
+// entities never merge with another's (see store.scope). A flow with no
+// `_playbook` (bare CLI/demo runs) uses the unscoped store.
+const storeFor = (flow) => {
+	return store.scope(flow._playbook);
+};
+
 // A block's `when` guard is a Mongo-style query (sift) over the entity context.
 const passesWhen = (when, ctx) => {
 	if (!when) {
@@ -88,6 +95,7 @@ const createEngine = () => {
 		// produced fields into the target entity with provenance. Returns true
 		// if the target entity actually changed.
 		_apply: (flow, block, entity, seen) => {
+			const db = storeFor(flow);
 			const ctx = {};
 			ctx[block.forEach] = flattenEntity(entity);
 
@@ -96,13 +104,13 @@ const createEngine = () => {
 			// `filter` can read an ancestor's fields — e.g. on a host a cert
 			// produced, `{{ cert.issuer }}` / `when: { "cert.issuer": … }`. The
 			// first parent of each type wins; all are under `_parents`.
-			const parentEdges = store.edges({ toType: block.forEach, toKey: entity._identity });
+			const parentEdges = db.edges({ toType: block.forEach, toKey: entity._identity });
 
 			if (parentEdges.length > 0) {
 				const parents = [];
 
 				parentEdges.forEach((edge) => {
-					const parent = store.get(edge.from.type, edge.from.key);
+					const parent = db.get(edge.from.type, edge.from.key);
 
 					if (!parent) { return; }
 
@@ -173,13 +181,13 @@ const createEngine = () => {
 				batches.forEach((fields) => {
 					const result = envelope.makeResult(work, fields);
 					const toMerge = Object.assign({}, seed, result.fields);
-					const merged = store.upsert(block.mergeInto, toMerge, result.provenance);
+					const merged = db.upsert(block.mergeInto, toMerge, result.provenance);
 
 					// Derivation (new-type entity) records a lineage edge from the
 					// triggering parent to the produced child. Enrichment (same
 					// type) records none.
 					if (isDerivation) {
-						store.addEdge({
+						db.addEdge({
 							from: { type: block.forEach, key: entity._identity },
 							rel: block.relation || block.id,
 							to: { type: block.mergeInto, key: merged._identity },
@@ -234,11 +242,12 @@ const createEngine = () => {
 				_runId: flow._runId || uuid(),
 				_sweep: flow._sweep || 0
 			});
+			const db = storeFor(prepared);
 
-			Object.keys(flow.entities || {}).forEach((type) => { store.define(type, flow.entities[type]); });
+			Object.keys(flow.entities || {}).forEach((type) => { db.define(type, flow.entities[type]); });
 
 			const block = (prepared.blocks || []).find((candidate) => { return candidate.id === blockId; });
-			const entity = store.get(entityType, entityKey);
+			const entity = db.get(entityType, entityKey);
 
 			if (!block || !entity) {
 				return Promise.resolve({ ran: false, changed: false });
@@ -252,9 +261,10 @@ const createEngine = () => {
 		// Run the whole flow to a fixpoint over its (bounded) source.
 		run: (flow) => {
 			const preparedFlow = Object.assign({}, flow, { _runId: uuid(), _sweep: 0 });
+			const db = storeFor(preparedFlow);
 
 			Object.keys(flow.entities).forEach((type) => {
-				store.define(type, flow.entities[type]);
+				db.define(type, flow.entities[type]);
 			});
 
 			// Seed entities from the source (filter drops non-matching items).
@@ -270,7 +280,7 @@ const createEngine = () => {
 							return;
 						}
 
-						store.upsert(flow.source.emits, item, {
+						db.upsert(flow.source.emits, item, {
 							block: flow.source.id || "source",
 							source_item: null,
 							at: at,
@@ -292,7 +302,7 @@ const createEngine = () => {
 				// per-block concurrency/rate still comes from queue-promised.
 				return preparedFlow.blocks.reduce((chain, block) => {
 					return chain.then(() => {
-						const entities = store.all(block.forEach);
+						const entities = db.all(block.forEach);
 
 						return entities.reduce((inner, entity) => {
 							return inner.then(() => {

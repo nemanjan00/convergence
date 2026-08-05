@@ -72,16 +72,21 @@ module.exports = (mongoUrl, dbName) => {
 			return persistence._db().then((db) => {
 				return db.collection("entities").find({}).toArray().then((docs) => {
 					docs.forEach((doc) => {
-						const collection = store._collections[doc.type];
-
-						if (collection) {
-							collection.byIdentity[doc.key] = {
-								_type: doc.type,
-								_identity: doc.key,
-								_version: doc.version,
-								fields: doc.fields
-							};
+						// Stored types are namespaced per playbook (`<pb>::<type>`),
+						// but entityDefs are bare, so a matching collection may not
+						// exist yet. Create a minimal one on demand — keyFields only
+						// matter for future upserts, which the engine re-defines per
+						// run — so hydration never silently drops persisted entities.
+						if (!store._collections[doc.type]) {
+							store.define(doc.type, {});
 						}
+
+						store._collections[doc.type].byIdentity[doc.key] = {
+							_type: doc.type,
+							_identity: doc.key,
+							_version: doc.version,
+							fields: doc.fields
+						};
 					});
 
 					return db.collection("edges").find({}).toArray();

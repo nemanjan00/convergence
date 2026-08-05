@@ -134,3 +134,55 @@ describe("store edges", () => {
 		expect(store.edges({ toKey: "name=\"nope\"" })).toHaveLength(0);
 	});
 });
+
+describe("store.scope — per-playbook namespacing", () => {
+	beforeEach(() => {
+		store._reset();
+	});
+
+	it("keeps identical identities in different playbooks as SEPARATE entities", () => {
+		const a = store.scope("pb-a");
+		const b = store.scope("pb-b");
+
+		a.define("host", { key: ["ip"] });
+		b.define("host", { key: ["ip"] });
+
+		// The same discovery (1.1.1.1) shows up in two unrelated playbooks.
+		a.upsert("host", { ip: "1.1.1.1", tag: "from-a" }, provenanceAt("s", "t1"));
+		b.upsert("host", { ip: "1.1.1.1", tag: "from-b" }, provenanceAt("s", "t1"));
+
+		// Each playbook sees ONLY its own — no bleed (the phantom-entity bug).
+		expect(a.all("host")).toHaveLength(1);
+		expect(b.all("host")).toHaveLength(1);
+		expect(a.all("host")[0].fields.tag.value).toBe("from-a");
+		expect(b.all("host")[0].fields.tag.value).toBe("from-b");
+
+		// The raw store holds them under distinct namespaced collection keys.
+		expect(Object.keys(store._collections).sort()).toEqual(["pb-a::host", "pb-b::host"]);
+		expect(store.splitKey("pb-a::host")).toEqual({ playbook: "pb-a", type: "host" });
+	});
+
+	it("auto-links typed fields and edges WITHIN the playbook namespace", () => {
+		const a = store.scope("pb-a");
+
+		a.define("host", { key: ["name"], fields: { ip: { links: "ip", rel: "resolves_to" } } });
+		a.define("ip", { key: ["ip"] });
+		a.upsert("host", { name: "a.com", ip: "9.9.9.9" }, provenanceAt("dns", "t1"));
+
+		// The linked ip entity lands in pb-a's namespace, and the edge reads back
+		// in BARE types (the prefix is an implementation detail).
+		expect(a.all("ip")).toHaveLength(1);
+		const edges = a.edges({ fromType: "host" });
+		expect(edges).toHaveLength(1);
+		expect(edges[0].from.type).toBe("host");
+		expect(edges[0].to.type).toBe("ip");
+
+		// A different playbook shares none of it.
+		expect(store.scope("pb-b").all("ip")).toHaveLength(0);
+	});
+
+	it("a falsy playbook yields the unscoped store", () => {
+		expect(store.scope(null)).toBe(store);
+		expect(store.scope(undefined)).toBe(store);
+	});
+});

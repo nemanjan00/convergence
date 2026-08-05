@@ -18,9 +18,12 @@ const loader = require("../loader");
 const sources = require("../sources");
 const samples = require("../samples");
 
-// Flatten an entity to the { type, key, version, fields:{name:{value,block,at}} }
-// shape the frontend renders (same as bin/export.js).
+// Flatten an entity to the { type, key, version, playbook, fields } shape the
+// frontend renders. `type` is the BARE type and `playbook` is the producing
+// playbook (the store namespaces collections per playbook), so the UI can scope
+// a playbook's workspace to its own discoveries — no cross-playbook bleed.
 const serializeEntity = (entity) => {
+	const split = store.splitKey(entity._type);
 	const fields = {};
 
 	Object.keys(entity.fields).forEach((name) => {
@@ -31,7 +34,20 @@ const serializeEntity = (entity) => {
 		};
 	});
 
-	return { type: entity._type, key: entity._identity, version: entity._version, fields: fields };
+	return { type: split.type, key: entity._identity, version: entity._version, playbook: split.playbook, fields: fields };
+};
+
+// Tag a lineage edge with its playbook and strip the namespace prefix off its
+// endpoint types, so edges line up with the bare-typed, playbook-scoped entities.
+const serializeEdge = (edge) => {
+	const from = store.splitKey(edge.from.type);
+	const to = store.splitKey(edge.to.type);
+
+	return Object.assign({}, edge, {
+		from: Object.assign({}, edge.from, { type: from.type }),
+		to: Object.assign({}, edge.to, { type: to.type }),
+		playbook: from.playbook || to.playbook || null
+	});
 };
 
 // A full render snapshot for the frontend: the current entities/edges/journal
@@ -49,10 +65,17 @@ const snapshot = () => {
 		}
 	}
 
+	// Entities are grouped by BARE type (merging all playbooks' `host`s into one
+	// `entities.host` array); each row carries `.playbook` so the UI filters to
+	// the open playbook. The store keeps them in separate namespaced collections.
 	const entities = {};
 
-	Object.keys(store._collections).forEach((type) => {
-		entities[type] = store.all(type).map(serializeEntity);
+	Object.keys(store._collections).forEach((collectionKey) => {
+		const type = store.splitKey(collectionKey).type;
+
+		if (!entities[type]) { entities[type] = []; }
+
+		store.all(collectionKey).forEach((entity) => { entities[type].push(serializeEntity(entity)); });
 	});
 
 	return {
@@ -60,7 +83,7 @@ const snapshot = () => {
 		yaml: yaml,
 		spec: spec,
 		entities: entities,
-		edges: store.edges(),
+		edges: store.edges().map(serializeEdge),
 		executions: journal.all(),
 		playbooks: playbooks.all(),
 		samples: samples.all(),

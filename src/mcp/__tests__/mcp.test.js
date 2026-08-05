@@ -56,4 +56,29 @@ describe("mcp capability layer", () => {
 			expect(result.entities.host[0].country_code).toBe("US");
 		});
 	});
+
+	it("scopes entities per playbook — two playbooks with the same host don't bleed", () => {
+		store._reset();
+
+		const yaml = "apiVersion: v0\nkind: Flow\nmetadata: { name: q }\n" +
+			"entities: { host: { key: [ip] } }\n" +
+			"sources: [{ id: seed, block: source.ct-log, emits: host }]\n" +
+			"blocks: [{ id: country, uses: ip.country, for_each: host, merge_into: host, inputs: { ip: \"{{ host.ip }}\" } }]\n";
+
+		const run = (playbookId, ip) => {
+			return mcp.runFlow(yaml, { playbookId: playbookId, sourcePull: () => { return Promise.resolve([{ ip: ip }]); } });
+		};
+
+		// pb-1 discovers one host; pb-2 discovers the SAME identity plus another.
+		return run("pb-1", "93.184.216.34")
+			.then(() => { return run("pb-2", "93.184.216.34"); })
+			.then(() => { return run("pb-2", "8.8.8.8"); })
+			.then(() => {
+				// Each playbook's query returns only its own entities.
+				expect(mcp.queryEntities({ entityType: "host", playbook: "pb-1" }).row_count).toBe(1);
+				expect(mcp.queryEntities({ entityType: "host", playbook: "pb-2" }).row_count).toBe(2);
+				// The raw (unscoped) query sees neither — types are namespaced.
+				expect(mcp.queryEntities({ entityType: "host" }).row_count).toBe(0);
+			});
+	});
 });
