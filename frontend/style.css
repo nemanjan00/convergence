@@ -34,6 +34,68 @@ body {
 
 .app { display: flex; flex-direction: column; min-height: 100vh; }
 
+/* --- Grafana-style shell: left nav rail + main column --- */
+
+.shell { display: flex; min-height: 100vh; align-items: stretch; }
+
+.sidebar {
+	width: 232px; flex: 0 0 232px; background: #10131a;
+	border-right: 1px solid var(--border);
+	display: flex; flex-direction: column; gap: 4px; padding: 14px 12px;
+	position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.brand {
+	font-size: 16px; font-weight: 700; letter-spacing: 0.05em; text-transform: lowercase;
+	color: var(--text); padding: 6px 10px 14px;
+}
+.brand::before { content: "◆ "; color: var(--accent); }
+
+.nav-group { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
+.nav-label {
+	font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--dim);
+	padding: 6px 10px 2px; opacity: 0.8;
+}
+.nav-item {
+	appearance: none; text-align: left; font: inherit; font-size: 13.5px; cursor: pointer;
+	background: transparent; border: 0; border-left: 3px solid transparent;
+	color: var(--dim); padding: 9px 12px; border-radius: 0 8px 8px 0;
+	display: flex; align-items: center; gap: 10px;
+}
+.nav-item:hover { color: var(--text); background: var(--surface); }
+.nav-item.active { color: var(--text); background: var(--accent-weak); border-left-color: var(--accent); }
+.nav-item .ico { width: 18px; text-align: center; opacity: 0.9; }
+.nav-item .badge-n { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+
+.sidebar-foot { margin-top: auto; padding: 10px; font-size: 11px; color: var(--dim); border-top: 1px solid var(--border); }
+.sidebar-foot .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.dot.live { background: var(--k-entity); box-shadow: 0 0 6px var(--k-entity); }
+.dot.snap { background: var(--dim); }
+
+.main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.topbar {
+	display: flex; align-items: center; gap: 16px; padding: 14px 22px;
+	border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap;
+}
+.topbar .section-title { font-size: 17px; font-weight: 650; color: var(--text); }
+.topbar .section-sub { font-size: 12px; color: var(--dim); }
+.topbar .statbar { margin-left: auto; padding: 0; border: 0; background: transparent; }
+
+@media (max-width: 720px) {
+	.shell { flex-direction: column; }
+	.sidebar {
+		width: 100%; flex: none; height: auto; position: static; flex-direction: row;
+		overflow-x: auto; gap: 2px; padding: 8px; align-items: center;
+	}
+	.brand { padding: 6px 8px; white-space: nowrap; }
+	.nav-group { flex-direction: row; margin-top: 0; }
+	.nav-label { display: none; }
+	.nav-item { border-left: 0; border-bottom: 3px solid transparent; border-radius: 8px 8px 0 0; white-space: nowrap; }
+	.nav-item.active { border-left: 0; border-bottom-color: var(--accent); }
+	.nav-item .badge-n { margin-left: 6px; }
+	.sidebar-foot { display: none; }
+	.topbar .statbar { margin-left: 0; }
+}
+
 /* --- Reworked shell: header, stat bar, buttons, empty states --- */
 
 header .sub { font-size: 12px; color: var(--dim); margin-left: 2px; }

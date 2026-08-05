@@ -57,11 +57,11 @@ app.render(document.body, data);
 
 // Explorer (default view)
 const rows = document.querySelectorAll("tbody tr").length;
-const tabs = document.querySelectorAll(".tab").length;
+const tabs = document.querySelectorAll(".nav-item").length;
 const hasHost = document.body.innerHTML.indexOf("a.example.com") !== -1;
 
 // Switch to the flow builder and check the node canvas rendered.
-const builderTab = Array.from(document.querySelectorAll(".tab"))
+const builderTab = Array.from(document.querySelectorAll(".nav-item"))
 	.find((t) => t.textContent.indexOf("builder") !== -1);
 builderTab.click();
 
@@ -109,7 +109,7 @@ const yamlText = document.querySelector("pre.yaml").textContent;
 
 const failures = [];
 if (rows < 1) { failures.push("no table rows rendered"); }
-if (tabs !== 5) { failures.push("expected 5 tabs, got " + tabs); }
+if (tabs !== 5) { failures.push("expected 5 nav items, got " + tabs); }
 if (!hasHost) { failures.push("host value not in DOM"); }
 if (nodes !== 5) { failures.push("expected 5 canvas nodes, got " + nodes); }
 if (wires !== 4) { failures.push("expected 4 wires (in-place enrichment = 1 wire), got " + wires); }
@@ -119,8 +119,8 @@ if (columns < 2) { failures.push("layout did not spread nodes across layers (col
 if (yamlText.indexOf("verified_edit") === -1) { failures.push("block edit did not round-trip into YAML"); }
 
 // Switch to the discovery graph and check nodes + edges render.
-const graphTab = Array.from(document.querySelectorAll(".tab"))
-	.find((t) => t.textContent === "Graph");
+const graphTab = Array.from(document.querySelectorAll(".nav-item"))
+	.find((t) => t.textContent.indexOf("Discovery") !== -1);
 graphTab.click();
 
 const graphNodes = document.querySelectorAll(".gnode.ent").length;
@@ -128,7 +128,7 @@ if (graphNodes < 1) { failures.push("graph rendered no entity nodes"); }
 
 // Executions panel: switch to it, confirm the run log rendered a row per
 // execution with status pills, and that selecting one shows its input/output.
-const execTab = Array.from(document.querySelectorAll(".tab"))
+const execTab = Array.from(document.querySelectorAll(".nav-item"))
 	.find((t) => t.textContent.indexOf("Executions") !== -1);
 execTab.click();
 
@@ -145,7 +145,7 @@ if (detailText.indexOf("input") === -1 || detailText.indexOf("output") === -1) {
 
 // Playbooks: switch, confirm a row + a lifecycle pill render, and that cycling
 // the state changes the pill class (draft -> active -> paused).
-const pbTab = Array.from(document.querySelectorAll(".tab"))
+const pbTab = Array.from(document.querySelectorAll(".nav-item"))
 	.find((t) => t.textContent.indexOf("Playbooks") !== -1);
 pbTab.click();
 
@@ -165,14 +165,11 @@ if (!sampleChip) {
 		failures.push("playbooks: importing a sample did not add a card");
 	}
 }
-if (statePill) {
-	const before = statePill.getAttribute("class");
-	statePill.dispatchEvent(new window.Event("click", { bubbles: true }));
-	const afterPill = document.querySelector("[class*='pill-pb-']");
-	if (afterPill && afterPill.getAttribute("class") === before) {
-		failures.push("playbooks: state pill did not cycle on click");
-	}
-}
+// State is a STATIC badge now (no accidental click-to-cycle); change happens via
+// explicit action buttons. Confirm a card carries a state-action button.
+const pbAction = Array.from(document.querySelectorAll(".pbcard .actions button"))
+	.find((b) => /activate|pause/i.test(b.textContent));
+if (!pbAction) { failures.push("playbooks: no explicit activate/pause action on cards"); }
 
 // Phone orientation: render fresh at a narrow width and confirm the layout
 // flips to vertical (nodes stack down, not across) and still never overlaps.
@@ -180,7 +177,7 @@ window.innerWidth = 390;
 document.body.innerHTML = "";
 app.render(document.body, data);
 
-Array.from(document.querySelectorAll(".tab"))
+Array.from(document.querySelectorAll(".nav-item"))
 	.find((t) => t.textContent.indexOf("builder") !== -1)
 	.click();
 

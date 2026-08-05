@@ -874,8 +874,6 @@ const executionsView = (data, ui) => {
 
 // --- Playbooks (draft/active/paused lifecycle) ----------------------------
 
-const PB_STATES = ["draft", "active", "paused"];
-
 // naive flow-name from YAML metadata.name (frontend has no loader).
 const nameFromYaml = (yaml) => {
 	const match = String(yaml || "").match(/name:\s*["']?([^\s"'#]+)/);
@@ -884,15 +882,21 @@ const nameFromYaml = (yaml) => {
 };
 
 const playbooksView = (data, ui) => {
-	const cycle = (book) => {
-		const next = PB_STATES[(PB_STATES.indexOf(book.state) + 1) % PB_STATES.length];
+	// Deliberate state change (no accidental one-click cycling). Activating starts
+	// live recon on a schedule, so it asks first.
+	const setState = (book, target) => {
+		if (target === "active" && typeof window !== "undefined" && window.confirm) {
+			const ok = window.confirm("Activate \"" + book.name +
+				"\"?\n\nIt will run on its schedule and perform live reconnaissance against its targets.");
+			if (!ok) { return; }
+		}
 
 		if (ui.served) {
-			ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: next }).then(ui.refresh);
+			ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: target }).then(ui.refresh);
 			return;
 		}
 
-		book.state = next;
+		book.state = target;
 		ui.frame = ui.frame + 1;
 	};
 
@@ -901,6 +905,21 @@ const playbooksView = (data, ui) => {
 	const runNow = (book) => {
 		if (!ui.served) { return; }
 		ui.api("POST", "/api/playbooks/" + book.id + "/run").then(ui.refresh);
+	};
+
+	// Attrs for the "activate" button — disabled (can't schedule) when invalid.
+	const activateAttrs = (book) => {
+		const attrs = {
+			class: "btn btn-ghost", title: "schedule + run this playbook",
+			onclick: (e) => { e.stopPropagation(); setState(book, "active"); }
+		};
+
+		if (book.valid === false) {
+			attrs.disabled = true;
+			attrs.title = "fix validation errors before activating";
+		}
+
+		return attrs;
 	};
 
 	const exportBook = (book) => {
@@ -920,19 +939,20 @@ const playbooksView = (data, ui) => {
 			},
 			el("div", { class: "top" },
 				el("div", { class: "nm" }, book.name),
-				el("button", {
-					class: "pill pill-pb-" + book.state,
-					title: "click to cycle draft → active → paused",
-					onclick: (e) => { e.stopPropagation(); cycle(book); }
-				}, book.state)),
+				// Static badge — state is changed via the explicit buttons below.
+				el("span", { class: "pill pill-pb-" + book.state }, book.state)),
 			el("div", { class: "meta" },
 				el("span", {}, book.valid === false ? "✗ invalid" : "✓ valid"),
 				el("span", {}, book.schedule || "no schedule"),
 				el("span", {}, book.last_run_at ? ("ran " + String(book.last_run_at).slice(0, 10)) : "never run")),
 			el("div", { class: "actions" },
+				(book.state === "active")
+					? el("button", { class: "btn btn-ghost", title: "stop scheduling",
+						onclick: (e) => { e.stopPropagation(); setState(book, "paused"); } }, "⏸ pause")
+					: el("button", activateAttrs(book), "⚡ activate"),
 				ui.served
-					? el("button", { class: "btn btn-accent", title: "run now",
-						onclick: (e) => { e.stopPropagation(); runNow(book); } }, "▶ run")
+					? el("button", { class: "btn btn-accent", title: "converge once now",
+						onclick: (e) => { e.stopPropagation(); runNow(book); } }, "▶ run once")
 					: el("span", {}),
 				el("button", { class: "btn btn-ghost", title: "export portable artifact",
 					onclick: (e) => { e.stopPropagation(); exportBook(book); } }, "⇩ export")));
@@ -1153,31 +1173,6 @@ export const render = (root, data) => {
 	});
 	document.addEventListener("pointerup", () => { ui.drag = null; });
 
-	// Playbooks first — it's the home (pick/import/activate a flow); the rest show
-	// what your active playbooks have discovered.
-	const tabs = el("div", { class: "tabs" },
-		el("button", {
-			class: () => (ui.view === "playbooks" ? "tab active" : "tab"),
-			onclick: () => { ui.view = "playbooks"; }
-		}, "Playbooks (" + ui.playbooks.length + ")"),
-		el("button", {
-			class: () => (ui.view === "explorer" ? "tab active" : "tab"),
-			onclick: () => { ui.view = "explorer"; }
-		}, "Explorer"),
-		el("button", {
-			class: () => (ui.view === "graph" ? "tab active" : "tab"),
-			onclick: () => { ui.view = "graph"; }
-		}, "Graph"),
-		el("button", {
-			class: () => (ui.view === "executions" ? "tab active" : "tab"),
-			onclick: () => { ui.view = "executions"; }
-		}, "Executions (" + ((data.executions || []).length) + ")"),
-		el("button", {
-			class: () => (ui.view === "builder" ? "tab active" : "tab"),
-			onclick: () => { ui.view = "builder"; }
-		}, "Flow builder")
-	);
-
 	const views = {
 		explorer: () => explorer(data, ui),
 		builder: () => builder(data, ui),
@@ -1186,15 +1181,53 @@ export const render = (root, data) => {
 		graph: () => graphView(data, ui)
 	};
 
-	const body = el("div", {}, when(() => ui.view, (view) => views[view]()));
+	// Section metadata: title + subtitle shown in the main top bar, and the nav
+	// entry (icon, optional count). Playbooks is its OWN group (the home / manage
+	// layer); the rest are data-browsing views — a Grafana-like split.
+	const SECTIONS = {
+		playbooks: { title: "Playbooks", sub: "saved flows — draft · active · paused", ico: "▤", count: () => ui.playbooks.length },
+		explorer: { title: "Explorer", sub: "entities discovered across your active playbooks", ico: "▦" },
+		graph: { title: "Discovery graph", sub: "entities and how they were found", ico: "◈" },
+		executions: { title: "Executions", sub: "every block run — input, output, timing", ico: "≡", count: () => (data.executions || []).length },
+		builder: { title: "Flow builder", sub: "the active flow as a node graph", ico: "⚙" }
+	};
 
-	const app = el("div", { class: "app" },
-		el("header", {},
-			el("h1", {}, "convergence"),
-			el("span", { class: "sub" }, ui.served ? "live" : "snapshot")),
-		statBar(data, ui),
-		tabs,
-		body);
+	const navItem = (id) => {
+		const meta = SECTIONS[id];
+
+		return el("button", {
+			class: () => (ui.view === id ? "nav-item active" : "nav-item"),
+			onclick: () => { ui.view = id; }
+		},
+		el("span", { class: "ico" }, meta.ico),
+		el("span", {}, meta.title),
+		meta.count ? el("span", { class: "badge-n" }, () => { ui.frame; return String(meta.count()); }) : el("span", {}));
+	};
+
+	const sidebar = el("aside", { class: "sidebar" },
+		el("div", { class: "brand" }, "convergence"),
+		el("div", { class: "nav-group" },
+			el("div", { class: "nav-label" }, "manage"),
+			navItem("playbooks")),
+		el("div", { class: "nav-group" },
+			el("div", { class: "nav-label" }, "browse data"),
+			navItem("explorer"), navItem("graph"), navItem("executions"), navItem("builder")),
+		el("div", { class: "sidebar-foot" },
+			el("span", { class: "dot " + (ui.served ? "live" : "snap") }),
+			ui.served ? "live · connected" : "static snapshot"));
+
+	const topbar = el("div", { class: "topbar" }, () => {
+		const meta = SECTIONS[ui.view] || { title: "", sub: "" };
+
+		return el("div", { style: "display:flex;flex-direction:column;gap:2px" },
+			el("div", { class: "section-title" }, meta.title),
+			el("div", { class: "section-sub" }, meta.sub));
+	}, statBar(data, ui));
+
+	const main = el("main", { class: "main" }, topbar,
+		el("div", {}, when(() => ui.view, (view) => views[view]())));
+
+	const app = el("div", { class: "shell" }, sidebar, main);
 
 	root.appendChild(app);
 
