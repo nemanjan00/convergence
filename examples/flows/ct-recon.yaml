@@ -47,12 +47,14 @@ blocks:
       name: "{{ host.name }}"
     merge_into: host
 
-  # RDAP network owner for the resolved IP.
+  # RDAP network owner for the resolved IP. Guarded on its own output so it
+  # fires once, not on every later enrichment (convergence stays cheap).
   - id: whois
     uses: rdap
     for_each: host
     when:
       host.ip: { $ne: null }
+      host.network: { $exists: false }
     inputs:
       ip: "{{ host.ip }}"
     merge_into: host
@@ -65,6 +67,7 @@ blocks:
     for_each: host
     when:
       host.ip: { $ne: null }
+      host.open_ports: { $exists: false }
     inputs:
       target: "{{ host.ip }}"
     merge_into: host
@@ -77,6 +80,27 @@ blocks:
     for_each: host
     when:
       host.open_ports: { $in: [80, 443] }
+      host.http_status: { $exists: false }
     inputs:
       url: "https://{{ host.name }}"
+    merge_into: host
+
+  # Mail exchangers (DNS MX).
+  - id: mx
+    uses: mail.mx
+    for_each: host
+    when:
+      host.mx: { $exists: false }
+    inputs:
+      name: "{{ host.name }}"
+    merge_into: host
+
+  # Email auth posture (SPF + DMARC).
+  - id: mail-auth
+    uses: mail.auth
+    for_each: host
+    when:
+      host.spf: { $exists: false }
+    inputs:
+      name: "{{ host.name }}"
     merge_into: host

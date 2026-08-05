@@ -15,6 +15,8 @@ const BLOCK_MODULES = [
 	"./port-scan",
 	"./http-title",
 	"./rdap",
+	"./mail-mx",
+	"./mail-auth",
 	"./ip-country",
 	"./js"
 ];
