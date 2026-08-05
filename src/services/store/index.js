@@ -107,11 +107,14 @@ const store = {
 	// first-write-wins strategy so convergence is guaranteed.
 	define: (entityType, options) => {
 		const opts = options || {};
+		const existing = store._collections[entityType];
 
 		store._collections[entityType] = {
 			keyFields: opts.key || ["id"],
 			strategy: opts.merge || DEFAULT_STRATEGY,
-			byIdentity: {}
+			// Preserve already-loaded entities so hydrating from Mongo before a
+			// run survives the engine re-defining the type (runs accumulate).
+			byIdentity: existing ? existing.byIdentity : {}
 		};
 
 		return store;

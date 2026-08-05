@@ -2,8 +2,9 @@
 // with zero setup. Access via config.get("KEY").
 
 const DEFAULTS = {
-	MONGO_URL: "mongodb://localhost:27017",
-	MONGO_DB: "recon",
+	// Empty => persistence off (in-memory only). Set to enable Mongo persistence.
+	MONGO_URL: "",
+	MONGO_DB: "convergence",
 	// Default fan-out concurrency for blocks that do not declare their own.
 	DEFAULT_MAX_CONCURRENT: "10",
 	// Bounded-queue capacity; the backpressure knob for the whole runtime.

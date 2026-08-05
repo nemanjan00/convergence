@@ -20,7 +20,9 @@
 	"jest": {
 		"testEnvironment": "node",
 		"forceExit": true,
-		"roots": ["src"],
+		"roots": [
+			"src"
+		],
 		"transformIgnorePatterns": [
 			"/node_modules/(?!(uuid|sift)/)"
 		]
@@ -37,6 +39,7 @@
 		"ip-address": "^10.4.0",
 		"ipaddr.js": "^2.5.0",
 		"js-yaml": "^5.2.3",
+		"mongodb": "^7.5.0",
 		"queue-promised": "^0.0.30",
 		"random-useragent": "^0.5.0",
 		"read-tls-client-hello": "^2.0.0",
@@ -57,6 +60,7 @@
 		"husky": "^9.1.7",
 		"jest": "^30.4.2",
 		"lint-staged": "^17.3.0",
+		"mongodb-memory-server": "^11.2.0",
 		"nodemon": "^3.1.14"
 	}
 }

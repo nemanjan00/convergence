@@ -4,7 +4,7 @@ describe("config", () => {
 	it("returns default when env var is unset", () => {
 		delete process.env.MONGO_DB;
 
-		expect(config.get("MONGO_DB")).toBe("recon");
+		expect(config.get("MONGO_DB")).toBe("convergence");
 	});
 
 	it("prefers env var over default", () => {

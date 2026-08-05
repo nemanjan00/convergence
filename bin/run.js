@@ -11,6 +11,8 @@ const engineFactory = require("../src/engine");
 const blocks = require("../src/blocks");
 const sources = require("../src/sources");
 const store = require("../src/services/store");
+const config = require("../src/config");
+const persistenceFactory = require("../src/services/persistence");
 
 const flowPath = process.argv[2] ||
 	path.join(__dirname, "../examples/flows/ct-recon.yaml");
@@ -28,12 +30,29 @@ blocks.register(engine);
 
 const flow = loader.load(yamlString, { sourcePull: sourcePull });
 
+// Persistence is opt-in via MONGO_URL. When set, hydrate prior state before the
+// run and save after — so runs accumulate durably.
+const mongoUrl = config.get("MONGO_URL");
+const persistence = mongoUrl ? persistenceFactory(mongoUrl, config.get("MONGO_DB")) : null;
+
 console.log("Loaded and validated flow: " + flow.name);
 console.log("Source '" + flow.source.id + "' (" + flow.source.block + ") emits " + flow.source.emits);
-console.log("Blocks: " + flow.blocks.map((b) => b.id).join(", ") + "\n");
+console.log("Blocks: " + flow.blocks.map((b) => b.id).join(", "));
+console.log("Persistence: " + (persistence ? mongoUrl : "off (in-memory)") + "\n");
 console.log("converging (live)…\n");
 
-engine.run(flow)
+const hydrate = persistence ? persistence.load(store, flow.entities) : Promise.resolve();
+
+hydrate
+	.then(() => {
+		return engine.run(flow);
+	})
+	.then(() => {
+		return persistence ? persistence.save(store, Object.keys(flow.entities)) : null;
+	})
+	.then(() => {
+		return persistence ? persistence.close() : null;
+	})
 	.then(() => {
 		Object.keys(flow.entities).forEach((type) => {
 			const list = store.all(type);
