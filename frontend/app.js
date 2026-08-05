@@ -512,7 +512,7 @@ const BLOCK_ICONS = {
 	dns: "🌐", http: "🌍", tls: "🔒", ip: "📍", mail: "✉", rdap: "📖", port: "🔌",
 	ct: "🔎", passive: "🔎", ti: "⚠", asn: "🛰", internetdb: "🛰", cert: "🔒",
 	url: "🔗", email: "✉", hash: "#", decode: "🔁", refang: "🧬", regex: "🔤",
-	map: "🗺", filter: "⛃", fanout: "💥", webhook: "🪝", js: "🧩", cli: "⌘", exif: "🖼"
+	map: "🗺", filter: "⛃", fanout: "💥", webhook: "🪝", js: "🧩", cli: "⌘", exif: "🖼", log: "📄"
 };
 const blockIcon = (uses) => { return BLOCK_ICONS[String(uses || "").split(".")[0]] || "◆"; };
 
@@ -584,7 +584,10 @@ const builder = (data, ui) => {
 				ui.drag = { id: node.id, px: e.clientX, py: e.clientY, ox: (ui.pos[node.id] || {}).x || 0, oy: (ui.pos[node.id] || {}).y || 0 };
 				e.preventDefault();
 			},
-			ondblclick: () => { if (node.kind === "block" && ui.openBlockEditor) { ui.openBlockEditor(b); } }
+			ondblclick: () => {
+				if (node.kind !== "block") { return; }
+				if (b.uses === "log" && ui.openBlockLog) { ui.openBlockLog(b); } else if (ui.openBlockEditor) { ui.openBlockEditor(b); }
+			}
 		},
 		el("div", { class: "port in" }),
 		el("div", { class: "port out" }),
@@ -696,7 +699,26 @@ const builder = (data, ui) => {
 		ui.frame = ui.frame + 1;
 	};
 
+	// A `log` block's own log: everything that flowed through it (its executions'
+	// recorded input), newest first.
+	const openLog = (block) => {
+		ui.block = block.id;
+		const logs = (data.executions || []).filter((e) => { return e.block === block.id; }).slice().reverse();
+
+		const content = logs.length > 0
+			? el("div", { class: "logview" }, logs.slice(0, 100).map((e) => {
+				return el("div", { class: "logrow" },
+					el("div", { class: "logmeta" }, (e.entity ? e.entity.key : "") + "  ·  sweep " + (e.sweep || "-")),
+					el("pre", {}, JSON.stringify(e.input || {}, null, 2)));
+			}))
+			: el("p", { class: "muted" }, "nothing logged yet — activate/run the playbook; this block records whatever flows through it.");
+
+		ui.modal = { key: "log:" + block.id, title: "log · " + block.id, ico: "📄", describe: "what flowed through this log block (" + logs.length + " entries)", content: content };
+		ui.frame = ui.frame + 1;
+	};
+
 	ui.openBlockEditor = openEditor;
+	ui.openBlockLog = openLog;
 
 	return el("div", { class: "panel builder" },
 		el("div", { class: "hint" }, "source → blocks → entities · drag to arrange · double-click a block to edit · add blocks from the palette →"),
@@ -711,12 +733,18 @@ const builder = (data, ui) => {
 
 				if (!block) { return el("p", { class: "muted" }, "double-click a block on the canvas to edit it"); }
 
+				const actions = [
+					el("button", { class: "btn btn-accent", onclick: () => { openEditor(block); } }, "✎ edit")
+				];
+				if (block.uses === "log") {
+					actions.push(el("button", { class: "btn", onclick: () => { openLog(block); } }, "📄 view log"));
+				}
+				actions.push(el("button", { class: "btn", onclick: () => { deleteBlock(block.id); } }, "🗑 delete"));
+
 				return el("div", { class: "sel-block" },
 					el("div", { class: "editor-head" }, el("span", { class: "ico" }, blockIcon(block.uses)), el("span", {}, block.id)),
 					el("div", { class: "sub" }, block.uses),
-					el("div", { class: "actions" },
-						el("button", { class: "btn btn-accent", onclick: () => { openEditor(block); } }, "✎ edit"),
-						el("button", { class: "btn", onclick: () => { deleteBlock(block.id); } }, "🗑 delete")));
+					el("div", { class: "actions" }, actions));
 			}),
 			el("h3", {}, "flow yaml (live)"),
 			el("pre", { class: "yaml scroll" }, () => { ui.frame; return dumpYaml(ui.spec); })));

@@ -41,7 +41,7 @@ const data = {
 	],
 	playbooks: [ { id: "pb-1", name: "ct-recon", state: "active", valid: true, schedule: null, last_run_at: null, yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" } ],
 	samples: [ { name: "ct-recon", description: "CT recon sample", yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" } ],
-	library: { blocks: [{ uses: "http.title" }, { uses: "dns.a" }, { uses: "tls.cert" }], sources: [{ source: "source.ct-log" }] }
+	library: { blocks: [{ uses: "http.title" }, { uses: "dns.a" }, { uses: "tls.cert" }, { uses: "log", describe: "debug passthrough" }], sources: [{ source: "source.ct-log" }] }
 };
 
 const failures = [];
