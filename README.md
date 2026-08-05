@@ -1,5 +1,7 @@
 # convergence
 
+<p align="center"><img src="docs/banner.svg" alt="convergence — many recon paths converge into one deterministic engine, run to a fixpoint" width="100%"></p>
+
 > Repeatable agentic reconnaissance — **an AI composes the dataflow; a
 > deterministic engine runs it to a fixpoint.** The AI designs the machine; it
 > never runs the conveyor belt.

@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" width="1280" height="360" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" role="img" aria-label="convergence — many recon paths converge into one deterministic engine, run to a fixpoint">
+  <defs>
+    <linearGradient id="bbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#191d25"/>
+      <stop offset="0.55" stop-color="#12151b"/>
+      <stop offset="1" stop-color="#0c0e13"/>
+    </linearGradient>
+    <linearGradient id="bacc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8a6b"/>
+      <stop offset="1" stop-color="#ff5a7a"/>
+    </linearGradient>
+    <radialGradient id="bglow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ff6d5a" stop-opacity="0.6"/>
+      <stop offset="1" stop-color="#ff6d5a" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bglow2" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4ec9a5" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#4ec9a5" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="bdots" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.5" fill="#222834"/>
+    </pattern>
+    <filter id="bsoft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="9"/></filter>
+    <marker id="bin" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7686"/>
+    </marker>
+    <marker id="binA" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#ff6d5a"/>
+    </marker>
+  </defs>
+
+  <rect x="1" y="1" width="1278" height="358" rx="20" fill="url(#bbg)" stroke="#333b48"/>
+  <rect x="1" y="1" width="1278" height="358" rx="20" fill="url(#bdots)" opacity="0.5"/>
+  <ellipse cx="905" cy="185" rx="300" ry="210" fill="url(#bglow)" filter="url(#bsoft)"/>
+  <ellipse cx="1130" cy="120" rx="180" ry="150" fill="url(#bglow2)" filter="url(#bsoft)"/>
+
+  <!-- converging wires: many peripheral nodes -> the central engine -->
+  <g fill="none" stroke="#5b6472" stroke-width="1.8" opacity="0.9">
+    <path d="M1010,70  C935,88 905,120 892,150" marker-end="url(#bin)"/>
+    <path d="M1150,96  C1030,116 950,132 905,158" marker-end="url(#bin)"/>
+    <path d="M1196,182 C1080,182 970,182 918,182" marker-end="url(#bin)"/>
+    <path d="M1150,272 C1035,250 955,222 908,206" marker-end="url(#bin)"/>
+    <path d="M1006,300 C940,278 908,244 892,214" marker-end="url(#bin)"/>
+    <path d="M1226,120 C1120,150 1000,150 918,168" marker-end="url(#bin)" opacity="0.5"/>
+  </g>
+
+  <!-- fixpoint loop around the engine -->
+  <path d="M872,132 C812,150 812,220 872,238" fill="none" stroke="#ff6d5a" stroke-width="2" stroke-dasharray="5 6" marker-end="url(#binA)"/>
+
+  <!-- peripheral entity/source nodes -->
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11">
+    <g><rect x="954" y="56" width="72" height="26" rx="7" fill="#1e232c" stroke="#333b48"/><rect x="954" y="56" width="3.5" height="26" rx="2" fill="#6ea8fe"/><text x="968" y="73" fill="#cdd6e4">source</text></g>
+    <g><rect x="1150" y="82" width="66" height="26" rx="7" fill="#1e232c" stroke="#333b48"/><rect x="1150" y="82" width="3.5" height="26" rx="2" fill="#c084fc"/><text x="1164" y="99" fill="#cdd6e4">cert</text></g>
+    <g><rect x="1196" y="168" width="66" height="26" rx="7" fill="#1e232c" stroke="#333b48"/><rect x="1196" y="168" width="3.5" height="26" rx="2" fill="#4ec9a5"/><text x="1210" y="185" fill="#cdd6e4">host</text></g>
+    <g><rect x="1150" y="258" width="60" height="26" rx="7" fill="#1e232c" stroke="#333b48"/><rect x="1150" y="258" width="3.5" height="26" rx="2" fill="#6ea8fe"/><text x="1164" y="275" fill="#cdd6e4">ip</text></g>
+    <g><rect x="948" y="286" width="76" height="26" rx="7" fill="#1e232c" stroke="#333b48"/><rect x="948" y="286" width="3.5" height="26" rx="2" fill="#f0b429"/><text x="962" y="303" fill="#cdd6e4">domain</text></g>
+  </g>
+
+  <!-- central engine -->
+  <polygon points="885,128 928,153 928,201 885,226 842,201 842,153" fill="#2a1c1b" stroke="url(#bacc)" stroke-width="2"/>
+  <polygon points="885,128 928,153 928,201 885,226 842,201 842,153" fill="none" stroke="#ff6d5a" stroke-width="6" opacity="0.14" filter="url(#bsoft)"/>
+  <text x="885" y="172" fill="#ff8a6b" font-family="ui-monospace, monospace" font-size="9.5" letter-spacing="0.5" text-anchor="middle">ENGINE</text>
+  <text x="885" y="189" fill="#ffe0d7" font-size="13" font-weight="600" text-anchor="middle">converge</text>
+
+  <!-- wordmark -->
+  <text x="72" y="150" fill="#eef2f8" font-size="72" font-weight="680" letter-spacing="1.5"><tspan fill="#ff6d5a">◆</tspan> convergence</text>
+  <text x="78" y="196" fill="#c6cede" font-size="21">Many recon paths converge into one deterministic engine —</text>
+  <text x="78" y="226" fill="#98a2b3" font-size="21">an AI composes the flow, the engine runs it to a <tspan fill="#4ec9a5" font-weight="600">fixpoint</tspan>.</text>
+
+  <g font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12.5" fill="#98a2b3">
+    <rect x="78" y="262" width="128" height="27" rx="13.5" fill="none" stroke="#333b48"/><text x="94" y="280">AI · MCP</text>
+    <rect x="216" y="262" width="150" height="27" rx="13.5" fill="none" stroke="#333b48"/><text x="232" y="280">provenance graph</text>
+    <rect x="376" y="262" width="150" height="27" rx="13.5" fill="none" stroke="#333b48"/><text x="392" y="280">67 blocks · YAML</text>
+  </g>
+</svg>
