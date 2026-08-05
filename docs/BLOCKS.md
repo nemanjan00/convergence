@@ -163,6 +163,7 @@ The biggest graph-growers: one domain → many hosts. Run several and merge
 |---|---|---|---|
 | `fanout` | `for_each` array | one entity per element | Explode an array field into entities |
 | `filter` | `subject`/`from`, `where`/`rules` | classification / selected elements | sift-based: array-select, tag, or route (switch) |
+| `log` | any (templated) | — (records input) | Debug passthrough — snapshot what flows through; view it in Executions |
 | `js` | `code`, … | returned fields | Run a JS snippet (stdlib globals). **Trusted flows only** |
 | `cli` | `command`, `args[]`, `as` | `<as>` (stdout), `stderr`, `exit_code` | Run any installed recon tool via execFile. **Trusted flows only** |
 | `webhook` | `url`, `payload`, `headers{}` | — (side-effect) | **Outbound** POST-on-change (returns no fields = convergence-safe) |

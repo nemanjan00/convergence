@@ -18,7 +18,7 @@ describe("network blocks — offline tolerance", () => {
 		"mail.dnsbl", "tls.cert", "tls.versions", "tls.spki", "cert.parse",
 		"ti.greynoise", "ti.urlhaus", "http.paths", "http.json", "mail.mx",
 		"mail.auth", "url.parse", "email.parse", "hash.digest", "decode", "refang",
-		"exif", "webhook", "cli", "js"
+		"exif", "webhook", "cli", "log", "js"
 	].forEach((name) => {
 		it(name + " is registered", () => {
 			expect(map[name]).toBeDefined();

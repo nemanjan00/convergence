@@ -6,6 +6,7 @@
 module.exports = {
 	uses: "url.parse",
 	rate: {},
+	example: { in: { url: "https://api.example.com:8443/v1?a=1" }, out: { scheme: "https", host: "api.example.com", port: "8443", path: "/v1", query: "a=1" } },
 	handler: (input) => {
 		const raw = input.url;
 

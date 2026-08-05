@@ -76,12 +76,41 @@ const BLOCK_MODULES = [
 	"./exif",
 	"./webhook",
 	"./cli",
+	"./log",
 	"./js"
 ];
 
+const fs = require("fs");
+
+// One-line description from a block's leading `// Block: <uses> — <text>.` comment
+// (single source of truth — no separate metadata to drift).
+const describeOf = (modulePath) => {
+	try {
+		const src = fs.readFileSync(require.resolve(modulePath), "utf8");
+		const lines = [];
+
+		src.split("\n").some((line) => {
+			const match = line.match(/^\/\/ ?(.*)$/);
+			if (match === null) { return true; }
+			lines.push(match[1]);
+			return false;
+		});
+
+		const text = lines.join(" ").replace(/\s+/g, " ").trim().replace(/^Block:\s*\S+\s*[—-]\s*/, "");
+
+		return text.split(/\.\s/)[0].slice(0, 180);
+	} catch {
+		return "";
+	}
+};
+
 const load = (modulePath) => {
 	try {
-		return require(modulePath);
+		const mod = require(modulePath);
+
+		if (mod && !mod.describe) { mod.describe = describeOf(modulePath); }
+
+		return mod;
 	} catch (error) {
 		console.error("block failed to load (skipped): " + modulePath + " — " + error.message);
 

@@ -29,7 +29,7 @@ const mcp = {
 	listBlocks: () => {
 		return {
 			blocks: blocks.all().map((block) => {
-				return { uses: block.uses, rate: block.rate || {} };
+				return { uses: block.uses, rate: block.rate || {}, describe: block.describe || "", example: block.example || null };
 			}),
 			sources: sources.all().map((source) => {
 				return { source: source.source };

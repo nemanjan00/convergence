@@ -9,6 +9,7 @@ const host = require("../../utils/host");
 module.exports = {
 	uses: "dns.a",
 	rate: { maxConcurrent: 20 },
+	example: { in: { name: "example.com" }, out: { ip: "93.184.216.34", ips: ["93.184.216.34"] } },
 	handler: (input) => {
 		const name = host.from(input);
 

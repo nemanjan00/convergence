@@ -410,16 +410,28 @@ h3 { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing
 .badge.rel { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 
 /* builder: block palette + editor head */
-.palette { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 3px; margin: 6px 0 4px; }
+.palette { max-height: 260px; overflow: auto; display: flex; flex-direction: column; gap: 4px; margin: 6px 0 4px; }
 .pal-item {
-	display: flex; align-items: center; gap: 9px; text-align: left; cursor: pointer;
-	background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px;
-	padding: 6px 10px; color: var(--text); font: inherit; font-size: 12.5px; font-family: var(--mono);
+	display: flex; align-items: flex-start; gap: 9px; text-align: left; cursor: pointer;
+	background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+	padding: 7px 10px; color: var(--text); font: inherit; width: 100%;
 }
-.pal-item:hover { border-color: var(--accent); color: var(--accent); }
-.pal-ico { width: 18px; text-align: center; }
-.editor-head { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 13.5px; padding-bottom: 4px; }
+.pal-item:hover { border-color: var(--accent); }
+.pal-ico { width: 18px; text-align: center; font-size: 14px; flex: 0 0 auto; }
+.pal-text { min-width: 0; }
+.pal-name { font-family: var(--mono); font-size: 12.5px; }
+.pal-desc { font-size: 11px; color: var(--dim); line-height: 1.4; margin-top: 1px; }
+
+.editor-head { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 13.5px; }
 .editor-head .ico { font-size: 15px; }
+.sel-block { display: flex; flex-direction: column; gap: 6px; }
+.sel-block .sub { font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+.sel-block .actions { display: flex; gap: 6px; margin-top: 2px; }
+
+.modal.wide { max-width: 560px; max-height: 86vh; overflow: auto; }
+.modal .example { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 6px; }
+.modal .example .dk { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); margin-bottom: 2px; }
+.modal .example pre { margin: 0; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-family: var(--mono); font-size: 11px; overflow: auto; }
 
 .editor { display: flex; flex-direction: column; gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 4px; }

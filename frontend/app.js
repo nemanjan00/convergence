@@ -583,7 +583,8 @@ const builder = (data, ui) => {
 				if (node.kind === "block") { ui.block = b.id; ui.frame = ui.frame + 1; }
 				ui.drag = { id: node.id, px: e.clientX, py: e.clientY, ox: (ui.pos[node.id] || {}).x || 0, oy: (ui.pos[node.id] || {}).y || 0 };
 				e.preventDefault();
-			}
+			},
+			ondblclick: () => { if (node.kind === "block" && ui.openBlockEditor) { ui.openBlockEditor(b); } }
 		},
 		el("div", { class: "port in" }),
 		el("div", { class: "port out" }),
@@ -622,11 +623,16 @@ const builder = (data, ui) => {
 			if (lib.length === 0) { return el("p", { class: "muted" }, "block library unavailable (the served app provides it)"); }
 
 			const qy = String(ui.palQuery || "").toLowerCase();
-			const items = lib.map((b) => { return b.uses; }).filter((u) => { return u.toLowerCase().indexOf(qy) !== -1; }).sort();
+			const items = lib
+				.filter((b) => { return (b.uses + " " + (b.describe || "")).toLowerCase().indexOf(qy) !== -1; })
+				.sort((a, b) => { return a.uses < b.uses ? -1 : 1; });
 
-			return el("div", {}, items.map((uses) => {
-				return el("button", { class: "pal-item", title: "add " + uses, onclick: () => { addBlock(uses); } },
-					el("span", { class: "pal-ico" }, blockIcon(uses)), el("span", {}, uses));
+			return el("div", {}, items.map((b) => {
+				return el("button", { class: "pal-item", title: "add " + b.uses, onclick: () => { addBlock(b.uses); } },
+					el("span", { class: "pal-ico" }, blockIcon(b.uses)),
+					el("div", { class: "pal-text" },
+						el("div", { class: "pal-name" }, b.uses),
+						b.describe ? el("div", { class: "pal-desc" }, b.describe) : el("span", {})));
 			}));
 		}));
 
@@ -657,37 +663,61 @@ const builder = (data, ui) => {
 			() => (err.msg ? el("div", { class: "err" }, err.msg) : ""));
 	};
 
-	const editor = () => {
-		const block = (ui.spec.blocks || []).find((x) => x.id === ui.block);
+	const libMeta = (uses) => { return ((data.library && data.library.blocks) || []).find((b) => { return b.uses === uses; }) || {}; };
 
-		if (!block) {
-			return el("p", { class: "muted" }, "drag nodes to arrange · click a block to edit it");
+	// The editor FORM for one block — hosted in a modal (opened by double-click or
+	// the Edit button). Live: edits mutate the spec + bump frame; canvas/YAML follow.
+	const editorForm = (block) => {
+		const options = (current) => { return Object.keys(ui.spec.entities || {}).map((t) => { return el("option", { value: t, selected: t === current }, t); }); };
+		const meta = libMeta(block.uses);
+		const parts = [];
+
+		if (meta.example) {
+			parts.push(el("div", { class: "example" },
+				el("div", { class: "ex" }, el("div", { class: "dk" }, "example in"), el("pre", {}, JSON.stringify(meta.example.in, null, 2))),
+				el("div", { class: "ex" }, el("div", { class: "dk" }, "example out"), el("pre", {}, JSON.stringify(meta.example.out, null, 2)))));
 		}
 
-		const options = (current) => Object.keys(ui.spec.entities || {}).map((t) => {
-			return el("option", { value: t, selected: t === current }, t);
-		});
+		parts.push(field("uses", el("input", { class: "in", value: block.uses, oninput: (e) => { block.uses = e.target.value; ui.frame = ui.frame + 1; } })));
+		parts.push(field("for_each", el("select", { class: "in", onchange: (e) => { block.for_each = e.target.value; ui.frame = ui.frame + 1; } }, options(block.for_each))));
+		parts.push(field("merge_into", el("select", { class: "in", onchange: (e) => { block.merge_into = e.target.value; ui.frame = ui.frame + 1; } }, options(block.merge_into))));
+		parts.push(field("relation", el("input", { class: "in", value: block.relation || "", oninput: (e) => { const v = e.target.value.trim(); if (v) { block.relation = v; } else { delete block.relation; } ui.frame = ui.frame + 1; } })));
+		parts.push(jsonField("when (sift query)", block, "when"));
+		parts.push(jsonField("inputs", block, "inputs"));
+		parts.push(jsonField("rate", block, "rate"));
+		parts.push(el("button", { class: "btn", title: "remove this block", onclick: () => { ui.modal = null; deleteBlock(block.id); } }, "🗑 delete block"));
 
-		return el("div", { class: "editor" },
-			el("div", { class: "editor-head" }, el("span", { class: "ico" }, blockIcon(block.uses)), el("span", {}, block.id)),
-			field("uses", el("input", { class: "in", value: block.uses, oninput: (e) => { block.uses = e.target.value; ui.frame = ui.frame + 1; } })),
-			field("for_each", el("select", { class: "in", onchange: (e) => { block.for_each = e.target.value; ui.frame = ui.frame + 1; } }, options(block.for_each))),
-			field("merge_into", el("select", { class: "in", onchange: (e) => { block.merge_into = e.target.value; ui.frame = ui.frame + 1; } }, options(block.merge_into))),
-			field("relation", el("input", { class: "in", value: block.relation || "", oninput: (e) => { const v = e.target.value.trim(); if (v) { block.relation = v; } else { delete block.relation; } ui.frame = ui.frame + 1; } })),
-			jsonField("when (sift query)", block, "when"),
-			jsonField("inputs", block, "inputs"),
-			jsonField("rate", block, "rate"),
-			el("button", { class: "btn", title: "remove this block", onclick: () => { deleteBlock(block.id); } }, "🗑 delete block"));
+		return el("div", { class: "editor" }, parts);
 	};
 
+	const openEditor = (block) => {
+		ui.block = block.id;
+		ui.modal = { key: "edit:" + block.id, title: "edit " + block.id, ico: blockIcon(block.uses), describe: libMeta(block.uses).describe, content: editorForm(block) };
+		ui.frame = ui.frame + 1;
+	};
+
+	ui.openBlockEditor = openEditor;
+
 	return el("div", { class: "panel builder" },
-		el("div", { class: "hint" }, "source → blocks → entities · in-place enrichment loops on its entity · drag to arrange · click a block to edit · add blocks from the palette →"),
+		el("div", { class: "hint" }, "source → blocks → entities · drag to arrange · double-click a block to edit · add blocks from the palette →"),
 		canvas,
 		el("div", { class: "side" },
 			el("h3", {}, "add block"),
 			palette,
-			el("h3", {}, "edit block"),
-			el("div", { class: "inspector" }, when(() => ui.block, () => editor())),
+			el("h3", {}, "selected block"),
+			el("div", { class: "inspector" }, () => {
+				ui.frame;
+				const block = (ui.spec.blocks || []).find((x) => { return x.id === ui.block; });
+
+				if (!block) { return el("p", { class: "muted" }, "double-click a block on the canvas to edit it"); }
+
+				return el("div", { class: "sel-block" },
+					el("div", { class: "editor-head" }, el("span", { class: "ico" }, blockIcon(block.uses)), el("span", {}, block.id)),
+					el("div", { class: "sub" }, block.uses),
+					el("div", { class: "actions" },
+						el("button", { class: "btn btn-accent", onclick: () => { openEditor(block); } }, "✎ edit"),
+						el("button", { class: "btn", onclick: () => { deleteBlock(block.id); } }, "🗑 delete")));
+			}),
 			el("h3", {}, "flow yaml (live)"),
 			el("pre", { class: "yaml scroll" }, () => { ui.frame; return dumpYaml(ui.spec); })));
 };
@@ -1119,9 +1149,21 @@ const pbRunNow = (ui, book) => {
 	});
 };
 
-// In-app confirmation modal.
+// In-app modal — either a confirmation (message + Cancel/Confirm) or a content
+// dialog (e.g. the per-block editor) with a Done button.
 const modalEl = (ui, modal) => {
 	const close = () => { ui.modal = null; ui.frame = ui.frame + 1; };
+
+	if (modal.content) {
+		const head = [el("h3", {}, (modal.ico ? modal.ico + " " : "") + modal.title)];
+		if (modal.describe) { head.push(el("p", {}, modal.describe)); }
+
+		return el("div", { class: "modal-backdrop", onclick: close },
+			el("div", { class: "modal wide", onclick: (e) => { e.stopPropagation(); } },
+				el("div", {}, head),
+				modal.content,
+				el("div", { class: "modal-actions" }, el("button", { class: "btn btn-accent", onclick: close }, "Done"))));
+	}
 
 	return el("div", { class: "modal-backdrop", onclick: close },
 		el("div", { class: "modal", onclick: (e) => { e.stopPropagation(); } },
@@ -1525,16 +1567,11 @@ export const render = (root, data) => {
 	const main = el("main", { class: "main" }, topbar,
 		el("div", {}, when(() => ui.view, (view) => (views[view] || views.playbooks)())));
 
-	// Overlay layer: modal (confirmations) + transient toast. Reactive on frame.
-	const overlay = el("div", {}, () => {
-		ui.frame;
-		const parts = [];
-
-		if (ui.modal) { parts.push(modalEl(ui, ui.modal)); }
-		if (ui.toast) { parts.push(el("div", { class: "toast " + (ui.toast.kind || "") }, ui.toast.msg)); }
-
-		return el("div", {}, parts);
-	});
+	// Overlay: modal keyed on its IDENTITY (so editing inside it doesn't rebuild
+	// and drop input focus); toast is frame-reactive (set/cleared transiently).
+	const overlay = el("div", {},
+		when(() => (ui.modal ? (ui.modal.key || "modal") : "none"), (k) => (k === "none" ? el("span", {}) : modalEl(ui, ui.modal))),
+		el("div", {}, () => { ui.frame; return ui.toast ? el("div", { class: "toast " + (ui.toast.kind || "") }, ui.toast.msg) : el("span", {}); }));
 
 	const app = el("div", { class: "shell" }, sidebar, main, overlay);
 

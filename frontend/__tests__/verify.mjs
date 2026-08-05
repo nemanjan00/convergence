@@ -97,18 +97,23 @@ const wires = q("svg.wires path.wire").length;
 if (nodes !== 5) { failures.push("builder: expected 5 nodes, got " + nodes); }
 if (wires !== 4) { failures.push("builder: expected 4 wires, got " + wires); }
 
-document.querySelector(".gnode.block").dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
-const formFields = q(".editor .field").length;
-if (formFields < 7) { failures.push("builder: editor did not render, fields=" + formFields); }
+// double-click a block -> MODAL editor
+document.querySelector(".gnode.block").dispatchEvent(new window.Event("dblclick", { bubbles: true }));
+const formFields = q(".modal .editor .field").length;
+if (formFields < 7) { failures.push("builder: modal editor did not render, fields=" + formFields); }
 
-const relationInput = q(".editor .field")
+const relationInput = q(".modal .editor .field")
 	.map((f) => ({ label: f.querySelector("label").textContent, input: f.querySelector("input") }))
 	.find((f) => f.label === "relation").input;
 relationInput.value = "verified_edit";
 relationInput.dispatchEvent(new window.Event("input", { bubbles: true }));
 if (document.querySelector("pre.yaml").textContent.indexOf("verified_edit") === -1) {
-	failures.push("builder: block edit did not round-trip into YAML");
+	failures.push("builder: modal edit did not round-trip into YAML");
 }
+// close the modal (Done)
+const done = q(".modal .btn-accent").find((b) => b.textContent === "Done");
+if (done) { click(done); }
+if (q(".modal .editor").length !== 0) { failures.push("builder: modal did not close"); }
 
 // palette: adding a block adds a node to the canvas + lands in the YAML
 const palItem = q(".pal-item").find((b) => b.textContent.indexOf("tls.cert") !== -1);

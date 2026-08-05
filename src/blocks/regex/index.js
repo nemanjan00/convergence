@@ -127,6 +127,7 @@ const extractMap = (text, map) => {
 module.exports = {
 	uses: "regex",
 	rate: {},
+	example: { in: { text: "Server: nginx/1.25", fields: { server: "Server:\\s*(.+)" } }, out: { server: "nginx/1.25" } },
 	handler: (input) => {
 		const text = input.text !== undefined ? input.text : input.value;
 		const map = input.fields || input.map;

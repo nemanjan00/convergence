@@ -9,6 +9,7 @@ const host = require("../../utils/host");
 module.exports = {
 	uses: "ip.reverse",
 	rate: { maxConcurrent: 20 },
+	example: { in: { address: "1.1.1.1" }, out: { hostname: "one.one.one.one", hostnames: ["one.one.one.one"] } },
 	handler: (input) => {
 		const address = host.ip(input);
 

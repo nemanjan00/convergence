@@ -7,6 +7,7 @@ const http = require("../../services/http");
 module.exports = {
 	uses: "http.title",
 	rate: { maxConcurrent: 10 },
+	example: { in: { url: "https://example.com" }, out: { http_status: 200, server: "nginx", title: "Example Domain" } },
 	handler: (input) => {
 		const url = input.url;
 
