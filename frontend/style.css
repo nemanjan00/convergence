@@ -131,6 +131,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .pill-skipped { color: var(--dim); opacity: 0.7; }
 .pill-error { color: #ff8a7a; border-color: color-mix(in srgb, #ff8a7a 50%, transparent); }
 
+/* playbook lifecycle pills (clickable to cycle) */
+.pill-pb-draft { color: var(--dim); border-color: var(--border); cursor: pointer; background: transparent; font: inherit; }
+.pill-pb-active { color: var(--k-entity); border-color: color-mix(in srgb, var(--k-entity) 50%, transparent); cursor: pointer; background: transparent; font: inherit; }
+.pill-pb-paused { color: #f0b429; border-color: color-mix(in srgb, #f0b429 50%, transparent); cursor: pointer; background: transparent; font: inherit; }
+
 .rerun {
 	appearance: none; cursor: pointer; font: inherit; font-size: 12px;
 	background: var(--surface-2); color: var(--text);

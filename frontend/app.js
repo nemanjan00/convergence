@@ -787,6 +787,119 @@ const executionsView = (data, ui) => {
 		chips, retryBar(), banner(), table, el("h3", {}, "detail"), detail);
 };
 
+// --- Playbooks (draft/active/paused lifecycle) ----------------------------
+
+const PB_STATES = ["draft", "active", "paused"];
+
+// naive flow-name from YAML metadata.name (frontend has no loader).
+const nameFromYaml = (yaml) => {
+	const match = String(yaml || "").match(/name:\s*["']?([^\s"'#]+)/);
+
+	return match ? match[1] : "imported";
+};
+
+const playbooksView = (data, ui) => {
+	const cycle = (book) => {
+		const at = PB_STATES.indexOf(book.state);
+		book.state = PB_STATES[(at + 1) % PB_STATES.length];
+		ui.frame = ui.frame + 1;
+	};
+
+	const table = el("div", { class: "scroll" },
+		el("table", {},
+			el("thead", {}, el("tr", {},
+				el("th", {}, "name"), el("th", {}, "state"),
+				el("th", {}, "schedule"), el("th", {}, "valid"), el("th", {}, "last run"))),
+			el("tbody", {}, () => {
+				ui.frame;
+
+				return el("g", {}, ui.playbooks.map((book) => {
+					return el("tr", {
+						class: () => (ui.pbSel === book.id ? "row sel" : "row"),
+						onclick: () => { ui.pbSel = book.id; ui.pbExport = null; }
+					},
+					el("td", { class: "key", "data-label": "name" }, book.name),
+					el("td", { "data-label": "state" }, el("button", {
+						class: "pill pill-pb-" + book.state,
+						title: "click to cycle draft → active → paused",
+						onclick: (e) => { e.stopPropagation(); cycle(book); }
+					}, book.state)),
+					el("td", { "data-label": "schedule" }, el("div", { class: "val" }, book.schedule || "—")),
+					el("td", { "data-label": "valid" }, el("div", { class: "val" }, book.valid === false ? "✗" : "✓")),
+					el("td", { "data-label": "last run" }, el("div", { class: "val" }, book.last_run_at || "—")));
+				}));
+			})
+		)
+	);
+
+	const detail = el("div", { class: "lineage" }, () => {
+		ui.frame;
+
+		if (!ui.pbSel) {
+			return el("p", { class: "muted" }, "select a playbook — cycle its state, or export it");
+		}
+
+		const book = ui.playbooks.find((b) => b.id === ui.pbSel);
+
+		if (!book) {
+			return el("p", { class: "muted" }, "gone");
+		}
+
+		const parts = [
+			el("button", { class: "rerun", onclick: () => { ui.pbExport = JSON.stringify({ convergencePlaybook: 1, name: book.name, schedule: book.schedule, yaml: book.yaml }, null, 2); ui.frame = ui.frame + 1; } }, "⇩ export")
+		];
+
+		if (ui.pbExport) {
+			parts.push(el("h3", {}, "portable artifact"));
+			parts.push(el("pre", {}, ui.pbExport));
+		}
+
+		parts.push(el("h3", {}, "flow yaml"));
+		parts.push(el("pre", { class: "yaml" }, book.yaml || "(empty)"));
+
+		return el("div", {}, parts);
+	});
+
+	// Import: paste a portable artifact JSON or a bare flow YAML.
+	const importBox = el("textarea", {
+		class: "in", placeholder: "paste a playbook artifact (JSON) or a flow YAML…",
+		oninput: (e) => { ui.pbImportText = e.target.value; }
+	});
+
+	const importBtn = el("button", { class: "rerun", onclick: () => {
+		const text = String(ui.pbImportText || "").trim();
+		if (!text) { return; }
+
+		let name;
+		let yaml;
+		let schedule = null;
+
+		try {
+			const parsed = JSON.parse(text);
+			yaml = parsed.yaml || "";
+			name = parsed.name || nameFromYaml(yaml);
+			schedule = parsed.schedule || null;
+		} catch {
+			yaml = text;
+			name = nameFromYaml(text);
+		}
+
+		ui.playbooks.push({
+			id: "pb-" + (ui.playbooks.length + 1),
+			name: name, state: "draft", schedule: schedule, valid: true, yaml: yaml, last_run_at: null
+		});
+		ui.pbImportText = "";
+		ui.frame = ui.frame + 1;
+	} }, "⇧ import as draft");
+
+	return el("div", { class: "panel" },
+		el("div", { class: "hint" }, "saved flows with a lifecycle — click a state to cycle draft → active → paused; export/import as portable artifacts (wired to the served backend when it lands)"),
+		table,
+		el("h3", {}, "import"),
+		el("div", { class: "editor" }, importBox, importBtn),
+		el("h3", {}, "detail"), detail);
+};
+
 // --- Shell ----------------------------------------------------------------
 
 export const render = (root, data) => {
@@ -803,8 +916,21 @@ export const render = (root, data) => {
 
 	const narrow = isNarrow();
 
+	// Playbooks come from the data if present; otherwise seed one "active" from
+	// the current flow so the tab is meaningful in a static export.
+	const seedPlaybooks = (data.playbooks && data.playbooks.length > 0)
+		? data.playbooks.map((book) => Object.assign({}, book))
+		: (data.yaml ? [{
+			id: "pb-1", name: data.flow || "flow", state: "active",
+			schedule: null, valid: true, yaml: data.yaml, last_run_at: null
+		}] : []);
+
 	const ui = state({
 		view: "explorer",
+		playbooks: seedPlaybooks,
+		pbSel: null,
+		pbExport: null,
+		pbImportText: "",
 		type: entityTypes.indexOf("host") !== -1 ? "host" : entityTypes[0],
 		query: "",
 		selected: null,
@@ -864,13 +990,18 @@ export const render = (root, data) => {
 		el("button", {
 			class: () => (ui.view === "executions" ? "tab active" : "tab"),
 			onclick: () => { ui.view = "executions"; }
-		}, "Executions (" + ((data.executions || []).length) + ")")
+		}, "Executions (" + ((data.executions || []).length) + ")"),
+		el("button", {
+			class: () => (ui.view === "playbooks" ? "tab active" : "tab"),
+			onclick: () => { ui.view = "playbooks"; }
+		}, "Playbooks")
 	);
 
 	const views = {
 		explorer: () => explorer(data, ui),
 		builder: () => builder(data, ui),
 		executions: () => executionsView(data, ui),
+		playbooks: () => playbooksView(data, ui),
 		graph: () => graphView(data, ui)
 	};
 

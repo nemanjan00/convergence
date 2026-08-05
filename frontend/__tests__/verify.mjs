@@ -106,7 +106,7 @@ const yamlText = document.querySelector("pre.yaml").textContent;
 
 const failures = [];
 if (rows < 1) { failures.push("no table rows rendered"); }
-if (tabs !== 4) { failures.push("expected 4 tabs, got " + tabs); }
+if (tabs !== 5) { failures.push("expected 5 tabs, got " + tabs); }
 if (!hasHost) { failures.push("host value not in DOM"); }
 if (nodes !== 5) { failures.push("expected 5 canvas nodes, got " + nodes); }
 if (wires !== 4) { failures.push("expected 4 wires (in-place enrichment = 1 wire), got " + wires); }
@@ -138,6 +138,25 @@ document.querySelector("tbody tr.row").click();
 const detailText = document.querySelector(".lineage") ? document.querySelector(".lineage").textContent : "";
 if (detailText.indexOf("input") === -1 || detailText.indexOf("output") === -1) {
 	failures.push("executions: selecting a run did not show input/output");
+}
+
+// Playbooks: switch, confirm a row + a lifecycle pill render, and that cycling
+// the state changes the pill class (draft -> active -> paused).
+const pbTab = Array.from(document.querySelectorAll(".tab"))
+	.find((t) => t.textContent === "Playbooks");
+pbTab.click();
+
+const pbRows = document.querySelectorAll("tbody tr.row").length;
+const statePill = document.querySelector("[class*='pill-pb-']");
+if (pbRows < 1) { failures.push("playbooks: no rows rendered"); }
+if (!statePill) { failures.push("playbooks: no lifecycle pill rendered"); }
+if (statePill) {
+	const before = statePill.getAttribute("class");
+	statePill.dispatchEvent(new window.Event("click", { bubbles: true }));
+	const afterPill = document.querySelector("[class*='pill-pb-']");
+	if (afterPill && afterPill.getAttribute("class") === before) {
+		failures.push("playbooks: state pill did not cycle on click");
+	}
 }
 
 // Phone orientation: render fresh at a narrow width and confirm the layout
