@@ -1,5 +1,5 @@
 // Script block: block.js — run a snippet of JavaScript as a transform. The
-// snippet gets the stdlib helpers (ip, subnet, geo, balancer, randomIp) as
+// snippet gets the stdlib helpers (ip, subnet, geo, balancer) as
 // globals plus `input` (its resolved inputs, minus `code`), and returns the
 // fields to merge. This is the escape hatch for logic that isn't worth a
 // dedicated block — the GNU-Radio custom block / n8n Function-node equivalent.

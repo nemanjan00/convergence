@@ -61,4 +61,17 @@ describe("ip", () => {
 	it("random() on a bare address returns itself", () => {
 		expect(ip("93.184.216.34").random()).toBe("93.184.216.34");
 	});
+
+	it("randomFrom() picks a range and returns an address inside it", () => {
+		const ranges = ["93.184.216.0/24", "2a0d:f407:1006::/48"];
+
+		Array(30).fill().forEach(() => {
+			const address = ip.randomFrom(ranges);
+			const inOne = ranges.some((range) => {
+				return ip(range).contains(address);
+			});
+
+			expect(inOne).toBe(true);
+		});
+	});
 });

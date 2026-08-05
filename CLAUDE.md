@@ -15,8 +15,8 @@ come from there and are considered binding for this codebase.
 
 - `src/config` — env-backed config.
 - `src/utils/*` — spec/plumbing + reusable helpers: `envelope`, `load`,
-  `balancer`, `ip`, `subnet`, `geo`, `retry`, `random-ip`, `useragent`,
-  `dns-cache`. Not app logic.
+  `balancer`, `ip` (address framework incl. `random`/`randomFrom`), `subnet`,
+  `geo`, `retry`, `useragent`, `dns-cache`. Not app logic.
 - `src/services/*` — anything talking to an external service (or the store);
   named by function: `store`, `cache`, `resolver`, `dns-picker`, `asn`, `rdap`,
   `ip-lookup`, `ip-country`.

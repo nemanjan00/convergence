@@ -1,18 +1,28 @@
 // IP address framework (v4 + v6). Central to recon: mask, enumerate containing
-// networks, test subnet membership, and answer "does this range contain that
-// address". Accepts a bare address ("1.2.3.4", "2606:4700::1") or a CIDR
-// ("1.2.3.0/24"). Wraps ipaddr.js.
+// networks, test subnet membership, ask "does this range contain that address",
+// and generate a random address within a range. Accepts a bare address
+// ("1.2.3.4", "2606:4700::1") or a CIDR ("1.2.3.0/24"). Wraps ipaddr.js.
 //
-//   ip("93.184.216.34").mask(24)                 // "93.184.216.0"
+// The logic is family-AGNOSTIC: v4 and v6 share one code path, and the only
+// difference lives in the per-family constants below (width in bits/bytes).
+//
+//   ip("93.184.216.34").mask(24)                       // "93.184.216.0"
 //   ip("93.184.216.34").isInSubnet("93.184.216.0/24")  // true
 //   ip("93.184.216.0/24").contains("93.184.216.5")     // true
-//   ip("93.184.216.34").nets()                   // ["…/1", …, "…/32"]
+//   ip("93.184.216.0/24").random()                     // random addr in range
+//   ip.randomFrom(["2a0d:f407:1006::/48", "1.2.3.0/24"]) // random range + addr
 
 const crypto = require("crypto");
 const ipUtil = require("ipaddr.js");
 
-module.exports = (input) => {
-	const ip = {
+// Per-family constants — the ONLY place v4 and v6 differ.
+const FAMILY = {
+	ipv4: { version: 4, bytes: 4, bits: 32 },
+	ipv6: { version: 6, bytes: 16, bits: 128 }
+};
+
+const ip = (input) => {
+	const instance = {
 		_kind: undefined,
 		_buffer: undefined,
 		_parsed: undefined,
@@ -21,49 +31,53 @@ module.exports = (input) => {
 		_init: (value) => {
 			if (String(value).indexOf("/") !== -1) {
 				const parts = ipUtil.parseCIDR(value);
-				ip._parsed = parts[0];
-				ip._prefix = parts[1];
+				instance._parsed = parts[0];
+				instance._prefix = parts[1];
 			} else {
-				ip._parsed = ipUtil.parse(value);
+				instance._parsed = ipUtil.parse(value);
 			}
 
-			ip._kind = ip._parsed.kind();
-			ip._buffer = Buffer.from(ip._parsed.toByteArray());
+			instance._kind = instance._parsed.kind();
+			instance._buffer = Buffer.from(instance._parsed.toByteArray());
+		},
+
+		_bits: () => {
+			return FAMILY[instance._kind].bits;
 		},
 
 		kind: () => {
-			return ip._kind;
+			return instance._kind;
 		},
 
 		version: () => {
-			return ip._kind === "ipv6" ? 6 : 4;
+			return FAMILY[instance._kind].version;
 		},
 
 		isV4: () => {
-			return ip._kind === "ipv4";
+			return instance._kind === "ipv4";
 		},
 
 		isV6: () => {
-			return ip._kind === "ipv6";
+			return instance._kind === "ipv6";
 		},
 
 		// Prefix length when built from a CIDR, else null.
 		prefix: () => {
-			return ip._prefix === undefined ? null : ip._prefix;
+			return instance._prefix === undefined ? null : instance._prefix;
 		},
 
 		toString: () => {
-			return ip._parsed.toString();
+			return instance._parsed.toString();
 		},
 
 		toByteArray: () => {
-			return Array.from(ip._buffer);
+			return Array.from(instance._buffer);
 		},
 
 		// Zero out all bits below the given prefix length.
 		mask: (initialMaskSize) => {
 			let maskSize = initialMaskSize;
-			const buffer = Buffer.from(ip._buffer.toString("hex"), "hex");
+			const buffer = Buffer.from(instance._buffer.toString("hex"), "hex");
 
 			const mask = Array(buffer.length)
 				.fill(0)
@@ -83,33 +97,34 @@ module.exports = (input) => {
 
 		// Network address for this CIDR (or /full-length when bare).
 		network: () => {
-			const bits = ip._prefix === undefined ? ip._buffer.length * 8 : ip._prefix;
+			const bits = instance._prefix === undefined ? instance._bits() : instance._prefix;
 
-			return ip.mask(bits);
+			return instance.mask(bits);
 		},
 
 		// A random address within this CIDR: keep the network bits, randomise the
-		// host bits (same binary op for v4 and v6). A bare address has no host
-		// bits, so it returns itself. Used for egress-address rotation.
+		// host bits. Family-agnostic (widths come from FAMILY). Host bits use
+		// crypto random bytes for a uniform, unpredictable distribution. A bare
+		// address has no host bits, so it returns itself.
 		random: () => {
-			const totalBits = ip._buffer.length * 8;
-			const prefix = ip._prefix === undefined ? totalBits : ip._prefix;
-			const buffer = Buffer.from(ipUtil.parse(ip.network()).toByteArray());
-			const hostBits = totalBits - prefix;
+			const bits = instance._bits();
+			const prefix = instance._prefix === undefined ? bits : instance._prefix;
+			const buffer = Buffer.from(ipUtil.parse(instance.network()).toByteArray());
+			const hostBits = bits - prefix;
 
 			if (hostBits <= 0) {
 				return ipUtil.fromByteArray(Array.from(buffer)).toString();
 			}
 
 			const hostByteCount = Math.ceil(hostBits / 8);
-			const random = crypto.randomBytes(hostByteCount);
+			const randomBytes = crypto.randomBytes(hostByteCount);
 
 			// Zero the bits of the top random byte that fall inside the prefix.
 			const overhang = hostByteCount * 8 - hostBits;
-			random[0] &= 0xff >> overhang;
+			randomBytes[0] &= 0xff >> overhang;
 
 			for (let i = 0; i < hostByteCount; i++) {
-				buffer[buffer.length - 1 - i] |= random[hostByteCount - 1 - i];
+				buffer[buffer.length - 1 - i] |= randomBytes[hostByteCount - 1 - i];
 			}
 
 			return ipUtil.fromByteArray(Array.from(buffer)).toString();
@@ -117,10 +132,8 @@ module.exports = (input) => {
 
 		// Every containing network, from /1 down to the full address length.
 		nets: () => {
-			const bits = ip._buffer.length * 8;
-
-			return Array(bits).fill(true).map((_flag, key) => {
-				return ip.mask(key + 1) + "/" + (key + 1);
+			return Array(instance._bits()).fill(true).map((_flag, key) => {
+				return instance.mask(key + 1) + "/" + (key + 1);
 			});
 		},
 
@@ -128,30 +141,41 @@ module.exports = (input) => {
 		isInSubnet: (cidr) => {
 			const parts = ipUtil.parseCIDR(cidr);
 
-			if (parts[0].kind() !== ip._kind) {
+			if (parts[0].kind() !== instance._kind) {
 				return false;
 			}
 
-			return ip._parsed.match(parts[0], parts[1]);
+			return instance._parsed.match(parts[0], parts[1]);
 		},
 
 		// Does this CIDR contain the given address? Requires a CIDR construction.
 		contains: (other) => {
-			if (ip._prefix === undefined) {
+			if (instance._prefix === undefined) {
 				throw new Error("contains() requires a CIDR, e.g. ip(\"1.2.3.0/24\")");
 			}
 
 			const otherParsed = ipUtil.parse(other);
 
-			if (otherParsed.kind() !== ip._kind) {
+			if (otherParsed.kind() !== instance._kind) {
 				return false;
 			}
 
-			return otherParsed.match(ip._parsed, ip._prefix);
+			return otherParsed.match(instance._parsed, instance._prefix);
 		}
 	};
 
-	ip._init(input);
+	instance._init(input);
 
-	return ip;
+	return instance;
 };
+
+// Egress-range rotation: pick one of a set of owned ranges (mixed v4/v6 allowed)
+// and return a random address inside it. Ranges are deployment config supplied
+// by the caller — the framework does not bake any in.
+ip.randomFrom = (ranges) => {
+	const range = ranges[Math.floor(Math.random() * ranges.length)];
+
+	return ip(range).random();
+};
+
+module.exports = ip;

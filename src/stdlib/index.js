@@ -12,14 +12,12 @@ const ip = require("../utils/ip");
 const subnet = require("../utils/subnet");
 const geo = require("../utils/geo");
 const balancer = require("../utils/balancer");
-const randomIp = require("../utils/random-ip");
 
 const stdlib = {
-	ip: ip,           // ip(addr|cidr) -> mask/nets/isInSubnet/contains/...
+	ip: ip,           // ip(addr|cidr) -> mask/nets/isInSubnet/contains/random; ip.randomFrom(ranges)
 	subnet: subnet,   // subnet(counts, network) -> VLSM layout
 	geo: geo,         // geo.findNearestCountry(...)
-	balancer: balancer, // balancer() -> weighted-random pool
-	randomIp: randomIp  // randomIp(ranges) -> { getRandomIP() }
+	balancer: balancer // balancer() -> weighted-random pool
 };
 
 module.exports = stdlib;
