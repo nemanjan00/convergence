@@ -352,9 +352,11 @@ const builder = (data, ui) => {
 export const render = (root, data) => {
 	const graph = computeGraph(data.spec || { entities: {}, sources: [], blocks: [] });
 
+	const entityTypes = Object.keys(data.entities);
+
 	const ui = state({
 		view: "explorer",
-		type: Object.keys(data.entities)[0],
+		type: entityTypes.indexOf("host") !== -1 ? "host" : entityTypes[0],
 		query: "",
 		selected: null,
 		block: null,

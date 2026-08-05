@@ -17,10 +17,11 @@ const bundle = execSync(
 	{ cwd: root, maxBuffer: 32 * 1024 * 1024 }
 ).toString();
 
-const data = execSync("node bin/export.js", {
-	cwd: root,
-	maxBuffer: 32 * 1024 * 1024
-}).toString();
+// Use a pre-captured run if RESULT_JSON points at one (live export is slow);
+// otherwise run the flow now.
+const data = process.env.RESULT_JSON
+	? fs.readFileSync(process.env.RESULT_JSON).toString()
+	: execSync("node bin/export.js", { cwd: root, maxBuffer: 32 * 1024 * 1024 }).toString();
 
 const css = fs.readFileSync(path.join(root, "frontend", "style.css")).toString();
 

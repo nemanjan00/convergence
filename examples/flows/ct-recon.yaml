@@ -21,7 +21,7 @@ sources:
   - id: ct
     block: source.ct-log
     params:
-      match_domains: ["*.example.com"]  # empty => firehose
+      match_domains: ["nemanja.top"]    # a real CT query
     emits: cert
     filter:
       cert.is_precert: false            # skip pre-certificates
@@ -47,17 +47,17 @@ blocks:
       name: "{{ host.name }}"
     merge_into: host
 
-  # RDAP registrar/abuse, once per host.
+  # RDAP network owner for the resolved IP.
   - id: whois
     uses: rdap
     for_each: host
     when:
-      host.registrar: { $exists: false }
+      host.ip: { $ne: null }
     inputs:
-      domain: "{{ host.name }}"
+      ip: "{{ host.ip }}"
     merge_into: host
     rate:
-      max_per_min: 60
+      max_per_min: 120
 
   # Port scan — fires as soon as the host has an ip, no matter who set it.
   - id: scan

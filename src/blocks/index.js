@@ -11,6 +11,10 @@
 // them from a plugins directory / installed packages).
 const BLOCK_MODULES = [
 	"./fanout",
+	"./dns",
+	"./port-scan",
+	"./http-title",
+	"./rdap",
 	"./ip-country",
 	"./js"
 ];

@@ -11,6 +11,8 @@
 const got = require("got-verbose");
 
 const CRTSH_URL = "https://crt.sh/";
+const RETRIES = 4;
+const RETRY_DELAY_MS = 2000;
 
 const crtsh = {
 	_client: got,
@@ -34,13 +36,28 @@ const crtsh = {
 		});
 	},
 
-	// Fetch certs for a domain (and its subdomains).
+	// Fetch certs for a domain (and its subdomains). crt.sh is frequently
+	// overloaded (502s), so retry a few times with a short backoff.
 	search: (domain) => {
 		const url = CRTSH_URL + "?q=" + encodeURIComponent("%." + domain) + "&output=json";
 
-		return crtsh._client.get(url).then((response) => {
-			return crtsh._map(JSON.parse(response.body));
-		});
+		const attempt = (remaining) => {
+			return crtsh._client.get(url).then((response) => {
+				return crtsh._map(JSON.parse(response.body));
+			}).catch((error) => {
+				if (remaining <= 0) {
+					throw error;
+				}
+
+				return new Promise((resolve) => {
+					setTimeout(resolve, RETRY_DELAY_MS);
+				}).then(() => {
+					return attempt(remaining - 1);
+				});
+			});
+		};
+
+		return attempt(RETRIES);
 	}
 };
 

@@ -1,6 +1,6 @@
-// Run a flow and serialize the converged result — entities (fields +
-// provenance) and lineage edges — as JSON. This is the shape the data explorer
-// (and any UI) renders. Backend-only, no rendering here.
+// Run a flow (real sources + blocks, live network) and serialize the converged
+// result — entities (fields + provenance), lineage edges, spec, and yaml — as
+// JSON. This is the shape the data explorer / flow builder render.
 //
 // Run: yarn export [path/to/flow.yaml] > result.json
 
@@ -8,33 +8,26 @@ const fs = require("fs");
 const path = require("path");
 const loader = require("../src/loader");
 const engineFactory = require("../src/engine");
-const demoBlocks = require("../src/blocks/demo");
-const fanout = require("../src/blocks/fanout");
+const blocks = require("../src/blocks");
+const sources = require("../src/sources");
 const store = require("../src/services/store");
 
 const flowPath = process.argv[2] ||
 	path.join(__dirname, "../examples/flows/ct-recon.yaml");
 
 const yamlString = fs.readFileSync(flowPath).toString("utf8");
+const spec = loader.parse(yamlString);
+const source = spec.sources[0];
 
-const fakeCtSource = () => {
-	return Promise.resolve([
-		{ id: 1, san: ["a.example.com"], is_precert: false },
-		{ id: 2, san: ["b.example.com", "www.b.example.com"], is_precert: false },
-		{ id: 3, san: ["precert.example.com"], is_precert: true }
-	]);
-};
+const sourcePull = sources.pullFor(source.block, source.params) || (() => {
+	return Promise.resolve([]);
+});
 
 const engine = engineFactory.create();
-engine.registerBlock("fanout", fanout.handler);
-engine.registerBlock("dns.a", demoBlocks.dnsA);
-engine.registerBlock("rdap", demoBlocks.rdap, { maxConcurrent: 5 });
-engine.registerBlock("port.scan", demoBlocks.nmap, { maxConcurrent: 10 });
-engine.registerBlock("http.title", demoBlocks.httpTitle);
+blocks.register(engine);
 
-const flow = loader.load(yamlString, { sourcePull: fakeCtSource });
+const flow = loader.load(yamlString, { sourcePull: sourcePull });
 
-// Serialize an entity to a plain, UI-friendly shape.
 const serializeEntity = (entity) => {
 	const fields = {};
 
@@ -46,12 +39,7 @@ const serializeEntity = (entity) => {
 		};
 	});
 
-	return {
-		type: entity._type,
-		key: entity._identity,
-		version: entity._version,
-		fields: fields
-	};
+	return { type: entity._type, key: entity._identity, version: entity._version, fields: fields };
 };
 
 engine.run(flow)
@@ -62,15 +50,14 @@ engine.run(flow)
 			entities[type] = store.all(type).map(serializeEntity);
 		});
 
-		const result = {
+		process.stdout.write(JSON.stringify({
 			flow: flow.name,
 			yaml: yamlString,
 			spec: loader.parse(yamlString),
 			entities: entities,
 			edges: store.edges()
-		};
+		}, null, 2) + "\n");
 
-		process.stdout.write(JSON.stringify(result, null, 2) + "\n");
 		process.exit(0);
 	})
 	.catch((error) => {
