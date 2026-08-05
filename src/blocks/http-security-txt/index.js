@@ -40,12 +40,13 @@ const fetchFirst = (base, locations) => {
 		return fetchFirst(base, locations.slice(1));
 	});
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "http.security-txt",
 	rate: { maxConcurrent: 8 },
 	handler: (input) => {
-		const base = String(input.url || "").replace(/\/$/, "");
+		const base = host.url(input);
 
 		if (!base) {
 			return Promise.resolve({});

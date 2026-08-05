@@ -47,12 +47,13 @@ const emails = (record) => {
 
 	return Array.from(new Set(found));
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "rdap.domain",
 	rate: { maxConcurrent: 5, maxPerMin: 120 },
 	handler: (input) => {
-		const domain = String(input.domain || input.name || "").replace(/^\*\./, "").trim();
+		const domain = host.from(input);
 
 		if (!domain) {
 			return Promise.resolve({});

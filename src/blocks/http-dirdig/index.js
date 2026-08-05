@@ -31,12 +31,13 @@ const isHit = (status) => { return status && status !== 404; };
 const isDir = (word, status) => {
 	return word.indexOf(".") === -1 && (status === 301 || status === 302 || status === 403 || status === 200);
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "http.dirdig",
 	rate: { maxConcurrent: 3 },
 	handler: (input) => {
-		const root = String(input.url || "").replace(/\/$/, "");
+		const root = host.url(input);
 
 		if (!root) {
 			return Promise.resolve({});

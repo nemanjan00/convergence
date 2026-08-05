@@ -21,7 +21,7 @@ const BLOCK_MODULES = [
 	"./dns-caa",
 	"./dns-soa",
 	"./dns-srv",
-	"./dns-spf-expand",
+	"./dns-spf",
 	"./ct-subdomains",
 	"./passive-hackertarget",
 	"./passive-rapiddns",
@@ -107,12 +107,16 @@ const blocks = {
 		return map;
 	},
 
-	// Register every loaded block into a runtime instance.
+	// Register every loaded block into a runtime instance. Blocks declare
+	// `rate: { maxConcurrent, maxPerMin }` (camelCase, matching the engine's
+	// registerBlock options) — snake_case is tolerated for older declarations.
 	register: (runtime) => {
 		blocks.all().forEach((block) => {
+			const rate = block.rate || {};
+
 			runtime.registerBlock(block.uses, block.handler, {
-				maxConcurrent: block.rate && block.rate.max_concurrent,
-				maxPerMin: block.rate && block.rate.max_per_min
+				maxConcurrent: rate.maxConcurrent !== undefined ? rate.maxConcurrent : rate.max_concurrent,
+				maxPerMin: rate.maxPerMin !== undefined ? rate.maxPerMin : rate.max_per_min
 			});
 		});
 

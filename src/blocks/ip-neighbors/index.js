@@ -5,12 +5,13 @@
 // message is treated as "no data", tolerantly.) Via services/http.
 
 const http = require("../../services/http");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "ip.neighbors",
 	rate: { maxConcurrent: 3 },
 	handler: (input) => {
-		const ip = input.ip || input.address;
+		const ip = host.ip(input);
 
 		if (!ip) {
 			return Promise.resolve({});

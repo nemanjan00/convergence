@@ -20,12 +20,13 @@ const WORDLIST = [
 const found = (status) => {
 	return status && status !== 404;
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "http.paths",
 	rate: { maxConcurrent: 4 },
 	handler: (input) => {
-		const base = String(input.url || "").replace(/\/$/, "");
+		const base = host.url(input);
 
 		if (!base) {
 			return Promise.resolve({});

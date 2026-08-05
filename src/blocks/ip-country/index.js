@@ -7,13 +7,14 @@
 // itself. This one wraps the offline ip-country service, so it always loads.
 
 const ipCountry = require("../../services/ip-country");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "ip.country",
 	// No network — the dataset is local — so no rate limit needed.
 	rate: {},
 	handler: (input) => {
-		const country = ipCountry.getCountry(input.ip);
+		const country = ipCountry.getCountry(host.ip(input));
 
 		if (!country) {
 			return Promise.resolve({});

@@ -14,12 +14,13 @@ const locs = (xml) => {
 
 	return matches.map((tag) => { return tag.replace(/<\/?loc>/gi, "").trim(); });
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "http.sitemap",
 	rate: { maxConcurrent: 4 },
 	handler: (input) => {
-		const base = String(input.url || "").replace(/\/$/, "");
+		const base = host.url(input);
 
 		if (!base) {
 			return Promise.resolve({});

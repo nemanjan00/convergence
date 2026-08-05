@@ -40,14 +40,16 @@ come from there and are considered binding for this codebase.
 - `src/services/*` — anything talking to an external service (or the store);
   named by function: `store`, `cache`, `resolver`, `dns-picker`, `asn`, `rdap`,
   `ip-lookup`, `ip-country`.
-- `src/blocks/*` — contract-conforming block handlers (`demo` today; real blocks
-  will adapt the services above into the work-item/result envelope).
+- `src/blocks/*` — the block library (67 blocks, one folder each). Full catalog
+  in `docs/BLOCKS.md`; the registry (`src/blocks/index.js`) is the source of truth.
+- `src/sources/*` — input sources (ct-log, list, webhook, tick).
 - `data/*` — bundled dataset stubs (see `docs/DATA_SOURCES.md`).
-- `src/runtime` — the deterministic executor (bounded concurrency, sift guards,
-  provenance merge).
-- `bin/*.js` — entrypoints (`demo.js`). Prod runs under `forever`, dev under
-  `nodemon` (`*-watch` scripts).
-- `docs/` — `ARCHITECTURE.md`, `FLOW_SPEC.md` (the contract), `BLOCK_CONTRACT.md`.
+- `src/engine` — the deterministic executor (entity-state fixpoint, bounded
+  concurrency, sift guards, provenance merge, lineage edges, execution journal).
+- `bin/*.js` — entrypoints: `run.js` (`yarn flow`), `export.js`, `mcp.mjs`,
+  `monitor.js`, `build-frontend.js`. Prod under `forever`, dev under `nodemon`.
+- `docs/` — `ARCHITECTURE.md`, `FLOW_SPEC.md` (the contract), `BLOCK_CONTRACT.md`,
+  `BLOCKS.md` (block catalog).
 - `examples/flows/*.yaml` — canonical flows.
 
 ## Key decisions (keep in sync as they land)

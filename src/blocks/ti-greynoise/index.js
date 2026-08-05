@@ -5,12 +5,13 @@
 // `riot` returned; a 404 means "not observed" => {}. Via services/http. Tolerant.
 
 const http = require("../../services/http");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "ti.greynoise",
 	rate: { maxConcurrent: 4 },
 	handler: (input) => {
-		const ip = input.ip || input.address;
+		const ip = host.ip(input);
 
 		if (!ip) {
 			return Promise.resolve({});

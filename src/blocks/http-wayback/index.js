@@ -23,15 +23,7 @@ module.exports = {
 			encodeURIComponent(domain + "/*") +
 			"&output=json&fl=original&collapse=urlkey&limit=" + LIMIT;
 
-		return http.get(url, { timeout: 15000 }).then((response) => {
-			let rows;
-
-			try {
-				rows = JSON.parse(response.body);
-			} catch {
-				return {};
-			}
-
+		return http.getJson(url, { timeout: 15000 }).then((rows) => {
 			if (!Array.isArray(rows) || rows.length <= 1) {
 				return {};
 			}

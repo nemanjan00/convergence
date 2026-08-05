@@ -64,7 +64,7 @@ The biggest graph-growers: one domain → many hosts. Run several and merge
 | `dns.caa` | `name` | `caa_issue[]`, `caa_issuewild[]`, `caa_iodef[]` | Which CAs may issue |
 | `dns.soa` | `name` | `primary_ns` → host, `admin_email` → email, `soa_serial` | Zone authority + admin mailbox |
 | `dns.srv` | `domain` \| `name` | `srv[]`, `srv_targets[]` → host | Probes common SRV services (SIP/XMPP/LDAP/…) |
-| `dns.spf-expand` | `domain` | `spf_includes[]` → domain, `spf_netblocks[]` → ip/subnet | Recursively expands SPF (bounded) |
+| `dns.spf` | `domain` | `spf[]` | Just the SPF record(s) — expansion is composition (see below), not baked in |
 
 ## Mail
 
@@ -175,8 +175,10 @@ The biggest graph-growers: one domain → many hosts. Run several and merge
   `internetdb` (ports+CVEs) → `http.meta`/`http.waf`/`http.headers` →
   `http.cors`. Pivot orgs with `ip.ripestat` → `asn.prefixes`/`asn.info` and
   `ip.neighbors`.
-- **Email/SPF pivot:** `source.ct-log` → `filter` (issuer) → `dns.txt` →
-  `filter` (SPF exact-match) → `dns.spf-expand` → included domains (recurse).
+- **Email/SPF pivot (self-feeding, no bespoke recursion):** `source.ct-log` →
+  `filter` (issuer) → `dns.spf` → `regex` pulls `include:` domains (typed →
+  domain) → `dns.spf` re-runs on each via convergence, so the SPF tree expands
+  to a fixpoint. `ip4:`/`ip6:` extract to netblocks the same way.
 - **Forensics / IOC enrichment:** `source.list` (IPs/hashes/files) →
   `ip.geo`/`rdap`/`ti.greynoise`/`ti.urlhaus`/`mail.dnsbl` + `refang`/`decode`/
   `hash.digest` + `exif` on sample files.

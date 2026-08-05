@@ -4,12 +4,13 @@
 
 const TIMEOUT_MS = 6000;
 const FIELDS = "status,country,countryCode,city,isp,org,as";
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "ip.geo",
 	rate: { maxConcurrent: 5, maxPerMin: 40 },
 	handler: (input) => {
-		const address = input.address;
+		const address = host.ip(input);
 
 		if (!address) {
 			return Promise.resolve({});

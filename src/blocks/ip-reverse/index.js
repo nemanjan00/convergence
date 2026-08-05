@@ -4,12 +4,13 @@
 // the graph grows from the IP outward. Tolerant: no PTR => no fields.
 
 const dns = require("dns").promises;
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "ip.reverse",
 	rate: { maxConcurrent: 20 },
 	handler: (input) => {
-		const address = input.address;
+		const address = host.ip(input);
 
 		if (!address) {
 			return Promise.resolve({});

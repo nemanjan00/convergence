@@ -5,12 +5,13 @@
 // Tolerant: failure => {}.
 
 const http = require("../../services/http");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "ip.ripestat",
 	rate: { maxConcurrent: 5 },
 	handler: (input) => {
-		const ip = input.ip || input.address;
+		const ip = host.ip(input);
 
 		if (!ip) {
 			return Promise.resolve({});

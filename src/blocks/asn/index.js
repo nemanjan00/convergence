@@ -3,12 +3,13 @@
 // field), enriching the ip node in the graph. Tolerant.
 
 const asn = require("../../services/asn");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "ip.asn",
 	rate: { maxConcurrent: 5 },
 	handler: (input) => {
-		const address = input.address;
+		const address = host.ip(input);
 
 		if (!address) {
 			return Promise.resolve({});

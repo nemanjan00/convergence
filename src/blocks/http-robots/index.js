@@ -15,12 +15,13 @@ const directive = (line, name) => {
 
 	return match[1];
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "http.robots",
 	rate: { maxConcurrent: 8 },
 	handler: (input) => {
-		const base = String(input.url || "").replace(/\/$/, "");
+		const base = host.url(input);
 
 		if (!base) {
 			return Promise.resolve({});

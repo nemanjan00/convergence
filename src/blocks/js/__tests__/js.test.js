@@ -25,15 +25,10 @@ describe("js (script block)", () => {
 		});
 	});
 
-	it("rejects when no code is given", () => {
-		return jsBlock.handler({ ip: "1.2.3.4" }).then(
-			() => {
-				throw new Error("expected rejection");
-			},
-			(error) => {
-				expect(error.message).toMatch(/requires a `code`/);
-			}
-		);
+	it("is tolerant when no code is given (resolves {} — never rejects into the engine)", () => {
+		return jsBlock.handler({ ip: "1.2.3.4" }).then((fields) => {
+			expect(fields).toEqual({});
+		});
 	});
 
 	it("enforces a timeout on runaway scripts", () => {

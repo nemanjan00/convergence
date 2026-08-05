@@ -17,12 +17,13 @@ const ZONES = [
 const reverse = (ip) => {
 	return ip.split(".").reverse().join(".");
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "mail.dnsbl",
 	rate: { maxConcurrent: 10 },
 	handler: (input) => {
-		const ip = input.ip || input.address;
+		const ip = host.ip(input);
 
 		// v4 only — the reversed-nibble v6 form is a separate (rare) path.
 		if (!ip || !/^\d+\.\d+\.\d+\.\d+$/.test(String(ip))) {

@@ -11,6 +11,21 @@ describe("built-in blocks", () => {
 		expect(blocks.allMap()["ip.country"]).toBeDefined();
 	});
 
+	it("register() forwards each block's declared rate limits to the runtime", () => {
+		// Regression guard: blocks declare camelCase rate:{maxConcurrent,maxPerMin};
+		// a snake_case read here silently dropped ALL rate tuning.
+		const seen = {};
+		const fakeRuntime = {
+			registerBlock: (uses, handler, opts) => { seen[uses] = opts; }
+		};
+
+		blocks.register(fakeRuntime);
+
+		// rdap declares maxPerMin:120; a DNS block declares maxConcurrent:20.
+		expect(seen["rdap"].maxPerMin).toBe(120);
+		expect(seen["dns.a"].maxConcurrent).toBe(20);
+	});
+
 	it("ip.country attaches country_code from an IP, offline", () => {
 		return blocks.allMap()["ip.country"].handler({ ip: "93.184.216.34" })
 			.then((fields) => {

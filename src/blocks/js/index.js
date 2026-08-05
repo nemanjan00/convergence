@@ -27,8 +27,11 @@ module.exports = {
 		const data = Object.assign({}, input);
 		delete data.code;
 
+		// Tolerant like every other block: a `code` template that resolves empty
+		// yields no fields rather than rejecting (a rejection would unwind the
+		// engine sweep and abort the whole run).
 		if (!code) {
-			return Promise.reject(new Error("js block requires a `code` input"));
+			return Promise.resolve({});
 		}
 
 		// stdlib helpers as globals + the resolved inputs as `input`.

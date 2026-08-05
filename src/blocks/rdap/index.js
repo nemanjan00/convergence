@@ -27,12 +27,13 @@ const orgName = (record) => {
 
 	return undefined;
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "rdap",
 	rate: { maxConcurrent: 5, maxPerMin: 120 },
 	handler: (input) => {
-		const ip = input.ip;
+		const ip = host.ip(input);
 
 		if (!ip) {
 			return Promise.resolve({});

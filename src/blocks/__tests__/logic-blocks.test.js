@@ -97,6 +97,50 @@ describe("logic blocks", () => {
 		});
 	});
 
+	describe("http.waf (signature match is pure)", () => {
+		// Stub the http service so we exercise only the signature logic offline.
+		const http = require("../../services/http");
+		const original = http.get;
+
+		afterEach(() => { http.get = original; });
+
+		it("detects Cloudflare from a cf-ray header", () => {
+			http.get = () => Promise.resolve({ status: 200, headers: { "cf-ray": "abc", server: "cloudflare" } });
+
+			return map["http.waf"].handler({ url: "https://x" }).then((fields) => {
+				expect(fields.waf).toBe("Cloudflare");
+			});
+		});
+
+		it("returns {} when no signature matches", () => {
+			http.get = () => Promise.resolve({ status: 200, headers: { server: "nginx" } });
+
+			return map["http.waf"].handler({ url: "https://x" }).then((fields) => {
+				expect(fields).toEqual({});
+			});
+		});
+	});
+
+	describe("http.cookies (flag parsing is pure)", () => {
+		const http = require("../../services/http");
+		const original = http.get;
+
+		afterEach(() => { http.get = original; });
+
+		it("parses Secure/HttpOnly/SameSite off Set-Cookie", () => {
+			http.get = () => Promise.resolve({
+				status: 200,
+				headers: { "set-cookie": ["sid=1; Secure; HttpOnly; SameSite=Lax"] }
+			});
+
+			return map["http.cookies"].handler({ url: "https://x" }).then((fields) => {
+				expect(fields.cookies[0]).toEqual({
+					name: "sid", secure: true, http_only: true, same_site: "lax"
+				});
+			});
+		});
+	});
+
 	describe("regex", () => {
 		it("field map: first match, capture group 1", () => {
 			return map["regex"].handler({

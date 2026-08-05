@@ -16,12 +16,13 @@ const encodeBytes = (buffer) => {
 
 	return lines.join("\n") + "\n";
 };
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "http.favicon",
 	rate: { maxConcurrent: 8 },
 	handler: (input) => {
-		const base = String(input.url || "").replace(/\/$/, "");
+		const base = host.url(input);
 
 		if (!base) {
 			return Promise.resolve({});

@@ -8,7 +8,7 @@ describe("network blocks — offline tolerance", () => {
 
 	[
 		"dns.a", "dns.aaaa", "dns.txt", "dns.ns", "dns.cname", "dns.caa", "dns.soa",
-		"dns.srv", "dns.spf-expand", "ct.subdomains", "passive.hackertarget",
+		"dns.srv", "dns.spf", "ct.subdomains", "passive.hackertarget",
 		"passive.rapiddns", "port.scan", "port.banner", "http.title", "http.headers",
 		"http.robots", "http.security-txt", "http.favicon", "http.redirects",
 		"http.links", "http.cookies", "http.dirdig", "http.request", "http.wayback", "http.crawl",
@@ -18,7 +18,7 @@ describe("network blocks — offline tolerance", () => {
 		"mail.dnsbl", "tls.cert", "tls.versions", "tls.spki", "cert.parse",
 		"ti.greynoise", "ti.urlhaus", "http.paths", "http.json", "mail.mx",
 		"mail.auth", "url.parse", "email.parse", "hash.digest", "decode", "refang",
-		"exif", "webhook", "cli"
+		"exif", "webhook", "cli", "js"
 	].forEach((name) => {
 		it(name + " is registered", () => {
 			expect(map[name]).toBeDefined();
