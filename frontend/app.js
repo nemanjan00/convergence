@@ -347,12 +347,144 @@ const builder = (data, ui) => {
 			el("pre", { class: "yaml scroll" }, () => { ui.frame; return dumpYaml(ui.spec); })));
 };
 
+// --- Graph (discovery mind-map) -------------------------------------------
+
+// Short display label from an entity key like 'name="a.com"' -> 'a.com'.
+const shortLabel = (key) => {
+	return String(key).replace(/^[^=]*=/, "").replace(/^"|"$/g, "");
+};
+
+const graphModel = (data, included) => {
+	const nodes = [];
+	const index = {};
+
+	Object.keys(data.entities).forEach((type) => {
+		if (!included[type]) {
+			return;
+		}
+
+		data.entities[type].forEach((entity) => {
+			const id = type + "|" + entity.key;
+			const node = { id: id, type: type, key: entity.key, label: shortLabel(entity.key), row: entity };
+			nodes.push(node);
+			index[id] = node;
+		});
+	});
+
+	const edges = data.edges.filter((edge) => {
+		return index[edge.from.type + "|" + edge.from.key] && index[edge.to.type + "|" + edge.to.key];
+	}).map((edge) => {
+		return { from: edge.from.type + "|" + edge.from.key, to: edge.to.type + "|" + edge.to.key, rel: edge.rel };
+	});
+
+	return { nodes: nodes, edges: edges };
+};
+
+const graphView = (data, ui) => {
+	const allTypes = Object.keys(data.entities);
+
+	const chips = el("div", { class: "chips" }, allTypes.map((type) => {
+		return el("button", {
+			class: () => (ui.graphTypes[type] ? "chip active" : "chip"),
+			onclick: () => { ui.graphTypes[type] = !ui.graphTypes[type]; ui.frame = ui.frame + 1; }
+		}, type + " (" + data.entities[type].length + ")");
+	}));
+
+	// Reactive canvas: nodes+edges recomputed when type toggles change.
+	const canvas = el("div", { class: "canvas" }, () => {
+		ui.frame;
+		const model = graphModel(data, ui.graphTypes);
+		const typeOrder = allTypes.filter((t) => ui.graphTypes[t]);
+		const perType = {};
+
+		// Lay out by type column (init positions once per node id).
+		model.nodes.forEach((node) => {
+			perType[node.type] = perType[node.type] || [];
+
+			if (!ui.pos[node.id]) {
+				const col = typeOrder.indexOf(node.type);
+				const rowN = perType[node.type].length;
+				ui.pos[node.id] = { x: 40 + col * 220, y: 34 + rowN * 78 };
+			}
+
+			perType[node.type].push(node);
+		});
+
+		const bounds = model.nodes.reduce((acc, n) => {
+			return { w: Math.max(acc.w, ui.pos[n.id].x + 200), h: Math.max(acc.h, ui.pos[n.id].y + 90) };
+		}, { w: 400, h: 300 });
+
+		const marker = el("defs", {}, el("marker", {
+			id: "garrow", viewBox: "0 0 10 10", refX: "9", refY: "5",
+			markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse"
+		}, el("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--wire)" })));
+
+		const edgeEls = model.edges.map((edge) => {
+			const path = wirePath(ui.pos[edge.from], ui.pos[edge.to]);
+			const mid = {
+				x: (ui.pos[edge.from].x + ui.pos[edge.to].x) / 2 + 92,
+				y: (ui.pos[edge.from].y + ui.pos[edge.to].y) / 2 + 20
+			};
+
+			return el("g", {},
+				el("path", { class: "wire", "marker-end": "url(#garrow)", d: path }),
+				el("text", { class: "wire-label", x: mid.x, y: mid.y }, edge.rel));
+		});
+
+		const wires = el("svg", { class: "wires", width: bounds.w, height: bounds.h }, marker, edgeEls);
+
+		const nodeEls = model.nodes.map((node) => {
+			return el("div", {
+				class: () => "gnode ent " + node.type + (ui.gsel === node.id ? " sel" : ""),
+				style: () => { ui.frame; const p = ui.pos[node.id]; return "left:" + p.x + "px;top:" + p.y + "px"; },
+				onmousedown: (e) => {
+					ui.gsel = node.id;
+					ui.drag = { id: node.id, px: e.clientX, py: e.clientY, ox: ui.pos[node.id].x, oy: ui.pos[node.id].y };
+					e.preventDefault();
+				}
+			},
+			el("div", { class: "kind" }, node.type),
+			el("div", { class: "title" }, node.label));
+		});
+
+		return el("div", { class: "stage", style: "width:" + bounds.w + "px;height:" + bounds.h + "px" }, wires, nodeEls);
+	});
+
+	const detail = el("div", { class: "side" }, () => {
+		if (!ui.gsel) {
+			return el("p", { class: "muted" }, "toggle types · drag nodes · click a node for its fields");
+		}
+
+		const parts = ui.gsel.split("|");
+		const type = parts[0];
+		const key = parts.slice(1).join("|");
+		const entity = (data.entities[type] || []).find((row) => row.key === key);
+
+		if (!entity) {
+			return el("p", { class: "muted" }, ui.gsel);
+		}
+
+		return el("pre", {}, JSON.stringify(entity, null, 2));
+	});
+
+	return el("div", { class: "panel builder" },
+		el("div", { class: "hint" }, "the discovery graph — nodes are entities, edges are how they were found"),
+		chips, canvas, detail);
+};
+
 // --- Shell ----------------------------------------------------------------
 
 export const render = (root, data) => {
 	const graph = computeGraph(data.spec || { entities: {}, sources: [], blocks: [] });
 
 	const entityTypes = Object.keys(data.entities);
+
+	// Graph view includes every type except very high-count ones (e.g. cert)
+	// by default, so the mind-map stays legible; toggle any on.
+	const graphTypes = {};
+	entityTypes.forEach((type) => {
+		graphTypes[type] = data.entities[type].length <= 50;
+	});
 
 	const ui = state({
 		view: "explorer",
@@ -363,6 +495,8 @@ export const render = (root, data) => {
 		graph: graph,
 		pos: graph.pos,
 		spec: data.spec,
+		graphTypes: graphTypes,
+		gsel: null,
 		frame: 0,
 		drag: null
 	});
@@ -384,11 +518,20 @@ export const render = (root, data) => {
 		el("button", {
 			class: () => (ui.view === "builder" ? "tab active" : "tab"),
 			onclick: () => { ui.view = "builder"; }
-		}, "Flow builder")
+		}, "Flow builder"),
+		el("button", {
+			class: () => (ui.view === "graph" ? "tab active" : "tab"),
+			onclick: () => { ui.view = "graph"; }
+		}, "Graph")
 	);
 
-	const body = el("div", {}, when(() => ui.view,
-		(view) => (view === "explorer" ? explorer(data, ui) : builder(data, ui))));
+	const views = {
+		explorer: () => explorer(data, ui),
+		builder: () => builder(data, ui),
+		graph: () => graphView(data, ui)
+	};
+
+	const body = el("div", {}, when(() => ui.view, (view) => views[view]()));
 
 	const app = el("div", { class: "app" },
 		el("header", {},

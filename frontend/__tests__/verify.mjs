@@ -81,12 +81,20 @@ const yamlText = document.querySelector("pre.yaml").textContent;
 
 const failures = [];
 if (rows < 1) { failures.push("no table rows rendered"); }
-if (tabs !== 2) { failures.push("expected 2 tabs, got " + tabs); }
+if (tabs !== 3) { failures.push("expected 3 tabs, got " + tabs); }
 if (!hasHost) { failures.push("host value not in DOM"); }
 if (nodes !== 5) { failures.push("expected 5 canvas nodes, got " + nodes); }
 if (wires !== 4) { failures.push("expected 4 wires (in-place enrichment = 1 wire), got " + wires); }
 if (formFields < 7) { failures.push("editor form did not render, fields=" + formFields); }
 if (yamlText.indexOf("verified_edit") === -1) { failures.push("block edit did not round-trip into YAML"); }
+
+// Switch to the discovery graph and check nodes + edges render.
+const graphTab = Array.from(document.querySelectorAll(".tab"))
+	.find((t) => t.textContent === "Graph");
+graphTab.click();
+
+const graphNodes = document.querySelectorAll(".gnode.ent").length;
+if (graphNodes < 1) { failures.push("graph rendered no entity nodes"); }
 
 if (failures.length > 0) {
 	console.error("FRONTEND RENDER FAILED:\n  - " + failures.join("\n  - "));

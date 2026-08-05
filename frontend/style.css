@@ -145,6 +145,16 @@ h3 { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing
 .wires { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
 .wire { fill: none; stroke: var(--wire); stroke-width: 2; }
 .wire.hot { stroke: var(--accent); stroke-width: 2.5; }
+.wire-label { fill: var(--dim); font-family: var(--mono); font-size: 9.5px; }
+
+/* entity-type node accents (graph mind-map) */
+.gnode.ent { width: 168px; }
+.gnode.host { border-left-color: var(--k-entity); }
+.gnode.ip { border-left-color: var(--k-source); }
+.gnode.cert { border-left-color: #c084fc; }
+.gnode.org { border-left-color: #f0b429; }
+.gnode.email { border-left-color: #ff6d5a; }
+.gnode.domain { border-left-color: #4ec9a5; }
 
 .gnode {
 	position: absolute;
