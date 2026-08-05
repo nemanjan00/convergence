@@ -1,0 +1,31 @@
+# convergence — one command to run the whole thing: MongoDB + the served app
+# (HTTP API + UI + active-playbook scheduler).
+#
+#   docker compose up --build          # app on http://localhost:3000
+#   docker compose run --rm app yarn flow    # one-shot: converge ct-recon live
+#   docker compose exec app yarn mcp         # MCP server (talks to the app's API)
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - convergence-mongo:/data/db
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: "3000"
+      MONGO_URL: "mongodb://mongo:27017"
+      MONGO_DB: "convergence"
+      # How often the scheduler re-runs every ACTIVE playbook:
+      MONITOR_CRON: "*/15 * * * *"
+      # MCP (yarn mcp inside the container) talks to the app here:
+      CONVERGENCE_URL: "http://localhost:3000"
+
+volumes:
+  convergence-mongo:

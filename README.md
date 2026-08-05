@@ -5,7 +5,7 @@
 > never runs the conveyor belt.
 
 ![status: alpha](https://img.shields.io/badge/status-alpha-orange)
-![tests: 272 passing](https://img.shields.io/badge/tests-272%20passing-brightgreen)
+![tests: 279 passing](https://img.shields.io/badge/tests-279%20passing-brightgreen)
 ![blocks: 67](https://img.shields.io/badge/blocks-67-4ec9a5)
 ![model: convergence fixpoint](https://img.shields.io/badge/model-convergence%20fixpoint-8a2be2)
 ![Node.js · CommonJS](https://img.shields.io/badge/Node.js-CommonJS-339933?logo=node.js&logoColor=white)
@@ -14,14 +14,15 @@
 ![license: all rights reserved](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)
 
 > **Project status — honest version.** This is an **alpha / reference
-> implementation**, not a product. It runs end-to-end on live network with 272
-> passing tests, but: it's **single-process and in-memory** (Mongo persistence is
-> opt-in, not a Mongo-native store yet); there is **no served HTTP backend**, so
-> the frontend's play/pause and execution re-run are **UI-only** (drive them
-> today via MCP + `yarn playbooks`); there is **no auth**; and block I/O + the
-> flow spec **may still change**. Use it for research and self-hosted recon, not
-> production. Nothing here needs an API key. See [Status](#status) for the
-> real-vs-pending breakdown.
+> implementation**, not a product. It runs end-to-end on live network with 279
+> passing tests and a real served app (REST API + UI + scheduler), but: it's a
+> **single node with an in-memory working set** (Mongo persists/hydrates it, but
+> it's not a Mongo-native store yet); there is **no auth** on the API; the UI's
+> execution **re-run** is not wired yet (engine hook pending); the engine can't
+> yet reference an entity's **parent/ancestor** entities in guards/inputs; and
+> block I/O + the flow spec **may still change**. Use it for research and
+> self-hosted recon, not production. Nothing here needs an API key. See
+> [Status](#status) for the real-vs-pending breakdown.
 
 The name is the execution model: enrichment blocks re-evaluate against each
 
@@ -31,21 +32,24 @@ entity's current **state** and re-run until nothing changes — so a fact ("port
 hundred paths discovered it.
 
 ```mermaid
-flowchart LR
-  AI["AI · MCP"] -->|composes| PB["Playbook · YAML"]
-  Human["Human · Flow Builder"] -->|edits| PB
-  SRC["Sources<br/>(CT logs, lists, webhooks, ticks)"] --> ENG
+flowchart TB
+  AI["AI · MCP client"] -->|HTTP| API
+  UI["Human · Web UI"] -->|HTTP| API["convergence app<br/>REST API + UI + scheduler"]
+  SRC["Sources<br/>CT · list · webhook · tick"] --> ENG
+  API --> PB["Playbooks<br/>draft · active · paused"]
   PB --> ENG{{"Convergence engine<br/>run to a fixpoint"}}
-  ENG -->|"for_each entity · when state matches"| BLK["Blocks enrich<br/>(DNS · TLS · HTTP · RDAP · TI · …)"]
+  ENG -->|"for_each entity · when state matches"| BLK["Blocks enrich<br/>DNS · TLS · HTTP · RDAP · TI · …"]
   BLK --> STORE[("Entity store<br/>merge by identity · provenance · edges")]
   STORE -.->|"a state change re-triggers blocks"| ENG
   ENG --> JRN[["Execution journal"]]
-  STORE --> UI["Explorer · Graph · Playbooks"]
-  JRN --> UI
+  STORE --> API
+  JRN --> API
+  API -.->|persist / hydrate| DB[("MongoDB")]
 ```
 
-The dashed edge is the whole idea: a write to the store re-triggers every block
-whose guard now matches — the loop runs until the store stops changing.
+Both surfaces talk to one running app. The dashed engine loop is the whole idea:
+a write to the store re-triggers every block whose guard now matches — it runs
+until the store stops changing.
 
 ## Why
 
@@ -62,16 +66,45 @@ anything, every field annotated with where it came from.
 
 ## Interfaces
 
-- **AI → MCP**: list blocks, validate a flow, run it to convergence, query
-  entities (`src/mcp`, `yarn mcp`) — all over the `@modelcontextprotocol` SDK.
-- **Human → Flow Builder**: a [`qrp`](https://www.npmjs.com/package/@nemanjan00/qrp)
-  frontend (`frontend/`, esbuild-bundled) over the same YAML — entity explorer,
-  draggable node canvas, discovery graph, and an n8n-style **Executions** log.
+One long-running app (`src/index.js`, `yarn web`) owns the state and serves a
+**REST API** + the **UI**; both surfaces below talk to it:
+
+- **AI → MCP**: `bin/mcp.mjs` (`yarn mcp`) is a `@modelcontextprotocol` stdio
+  server that is a **thin HTTP client of the app's API** — list blocks, validate/
+  run flows, query entities, and manage playbooks. Point it with `CONVERGENCE_URL`.
+- **Human → Web UI**: a [`qrp`](https://www.npmjs.com/package/@nemanjan00/qrp)
+  frontend the app serves — entity explorer, draggable node canvas, discovery
+  graph, an n8n-style **Executions** log, and **Playbooks** — fetching live data
+  from `/api/snapshot`.
+
+### API (selected)
+
+```
+GET  /api/health · /api/blocks · /api/snapshot · /api/executions[?failed=1]
+POST /api/flows/validate · /api/flows/run · /api/entities/query · /api/webhook
+GET/POST/PUT/DELETE /api/playbooks[/:id]   POST /api/playbooks/:id/{state,run}
+GET  /api/playbooks/:id/export   POST /api/playbooks/import
+```
 
 **Playbooks** are saved flows with a lifecycle — `draft → active → paused`
-(`src/services/playbooks`). Active playbooks are run on a schedule by the
-monitor (`yarn playbooks`); they export/import as portable artifacts. Manage
-them over MCP (`list/get/save/set_state/export/import_playbook`).
+(`src/services/playbooks`). The app's scheduler runs every *active* playbook on
+`MONITOR_CRON`; they export/import as portable artifacts. Manage them over the
+API or MCP (`list/get/save/set_state/export/import_playbook`).
+
+## Run it
+
+```bash
+# Docker: the whole thing (MongoDB + API + UI + scheduler)
+docker compose up --build          # -> http://localhost:3000
+docker compose run --rm app yarn flow   # one-shot: converge ct-recon (live)
+
+# Local (Node 20+, yarn)
+yarn install
+yarn web       # the app: REST API + UI + scheduler -> http://localhost:3000
+yarn mcp       # MCP server (set CONVERGENCE_URL; defaults to localhost:3000)
+```
+
+Nothing here needs an API key.
 
 ## Data plane
 
@@ -90,18 +123,22 @@ Working end-to-end on live network: the convergence engine (entity-state
 fixpoint, versioned store, per-field provenance, first-class lineage edges,
 typed-field auto-linking), a **YAML→flow loader** (template compilation + full
 spec validation), **67 blocks + 4 sources** ([`docs/BLOCKS.md`](docs/BLOCKS.md)),
-the MCP interface, the qrp frontend, an execution journal (Mongo-persistable),
-optional Mongo persistence, and a cron **monitor** for watching targets over
-time.
+a **served app** (REST API + UI + active-playbook scheduler), the MCP interface
+(an HTTP client of that API), the qrp frontend, an execution journal, playbook
+lifecycle, and Mongo persistence/hydrate.
+
+Pending (see the status note up top): UI execution **re-run** wiring, engine
+**parent references**, a Mongo-native store, and auth.
 
 ```bash
 yarn install
-yarn flow      # load, validate, and RUN examples/flows/ct-recon.yaml (live)
+yarn web       # the served app: REST API + UI + scheduler (http://localhost:3000)
+yarn flow      # one-shot: load, validate, and RUN ct-recon.yaml (live)
 yarn export    # run a flow and serialize entities+provenance+edges+executions
 yarn mcp       # AI-facing MCP server (stdio)
 yarn monitor   # re-run a flow on a cron (MONITOR_CRON); accumulate + alert
 yarn playbooks # run every ACTIVE playbook on a cron (play/pause runtime)
-yarn test      # 272 tests
+yarn test      # 279 tests
 yarn lint
 yarn frontend:build   # esbuild-bundle the qrp UI to a self-contained HTML
 ```

@@ -4,6 +4,7 @@ const babelParser = require("@babel/eslint-parser");
 // Flat config (ESLint v9+/v10). Mirrors the implement-js skill's intended
 // ruleset, which was written for the legacy .eslintrc.json format.
 module.exports = [
+	{ ignores: ["node_modules/**", "frontend/dist/**", "coverage/**"] },
 	js.configs.recommended,
 	{
 		files: ["src/**/*.js", "bin/**/*.js"],
@@ -40,6 +41,29 @@ module.exports = [
 		}
 	},
 	{
+		// ESM Node entrypoints (bin/*.mjs — the MCP server).
+		files: ["bin/**/*.mjs"],
+		languageOptions: {
+			ecmaVersion: 2022,
+			sourceType: "module",
+			parser: babelParser,
+			parserOptions: { requireConfigFile: false },
+			globals: {
+				process: "readonly",
+				console: "readonly",
+				fetch: "readonly"
+			}
+		},
+		rules: {
+			indent: ["error", "tab"],
+			quotes: ["error", "double"],
+			semi: ["error", "always"],
+			"no-param-reassign": "error",
+			"no-trailing-spaces": "error",
+			"no-unused-vars": ["error", { argsIgnorePattern: "^_" }]
+		}
+	},
+	{
 		// Frontend is ESM and runs in the browser (qrp); the .mjs verifier runs
 		// under Node + happy-dom.
 		files: ["frontend/**/*.js", "frontend/**/*.mjs"],
@@ -52,7 +76,8 @@ module.exports = [
 				window: "readonly",
 				document: "readonly",
 				console: "readonly",
-				process: "readonly"
+				process: "readonly",
+				fetch: "readonly"
 			}
 		},
 		rules: {

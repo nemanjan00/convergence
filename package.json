@@ -17,7 +17,7 @@
 		"mcp": "node bin/mcp.mjs",
 		"frontend:verify": "node frontend/__tests__/verify.mjs",
 		"frontend:build": "node bin/build-frontend.js",
-		"lint": "eslint src/ bin/",
+		"lint": "eslint src/ bin/ frontend/ *.config.js",
 		"test": "jest",
 		"test:watch": "jest --watch",
 		"prepare": "husky"
@@ -38,6 +38,7 @@
 	"dependencies": {
 		"@modelcontextprotocol/sdk": "^1.30.0",
 		"browserslist": "^4.28.7",
+		"express": "^5.2.1",
 		"geolib": "^3.3.14",
 		"got-verbose": "^0.0.18",
 		"ioredis": "^6.0.0",
@@ -69,6 +70,7 @@
 		"jest": "^30.4.2",
 		"lint-staged": "^17.3.0",
 		"mongodb-memory-server": "^11.2.0",
-		"nodemon": "^3.1.14"
+		"nodemon": "^3.1.14",
+		"supertest": "^7.2.2"
 	}
 }
