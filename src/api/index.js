@@ -63,12 +63,21 @@ const snapshot = () => {
 		edges: store.edges(),
 		executions: journal.all(),
 		playbooks: playbooks.all(),
-		samples: samples.all()
+		samples: samples.all(),
+		library: mcp.listBlocks()
 	};
 };
 
-const createApp = () => {
+// deps.persist() — called after every mutating request so state is durable
+// immediately (not only on the scheduler tick). No-op when persistence is off.
+const createApp = (deps) => {
 	const app = express();
+	const persist = (deps && deps.persist) || (() => { return Promise.resolve(); });
+
+	// Run a mutation, persist, then respond — so a restart never loses it.
+	const saved = (res, status, body) => {
+		return persist().then(() => { res.status(status).json(body); });
+	};
 
 	app.use(express.json({ limit: "4mb" }));
 	// Allow the browser UI to call the API from anywhere it's served.
@@ -113,7 +122,7 @@ const createApp = () => {
 
 		if (!entry) { return res.status(404).json({ error: "execution not found" }); }
 
-		return mcp.rerunExecution(entry).then((result) => { res.json(result); });
+		return mcp.rerunExecution(entry).then((result) => { return saved(res, 200, result); });
 	});
 
 	// Re-run every failed (final-state error) execution.
@@ -125,7 +134,7 @@ const createApp = () => {
 				return mcp.rerunExecution(entry).then((result) => { acc.push(result); return acc; });
 			});
 		}, Promise.resolve([])).then((results) => {
-			res.json({ reran: results.length, results: results });
+			return saved(res, 200, { reran: results.length, results: results });
 		});
 	});
 
@@ -141,9 +150,9 @@ const createApp = () => {
 	// --- playbooks (control plane) ---
 	app.get("/api/playbooks", (req, res) => { res.json(mcp.listPlaybooks()); });
 
-	app.post("/api/playbooks", (req, res) => { res.status(201).json(playbooks.create(req.body || {})); });
+	app.post("/api/playbooks", (req, res) => { return saved(res, 201, playbooks.create(req.body || {})); });
 
-	app.post("/api/playbooks/import", (req, res) => { res.status(201).json(playbooks.import(req.body || {})); });
+	app.post("/api/playbooks/import", (req, res) => { return saved(res, 201, playbooks.import(req.body || {})); });
 
 	app.get("/api/playbooks/:id", (req, res) => {
 		const book = playbooks.get(req.params.id);
@@ -166,15 +175,19 @@ const createApp = () => {
 
 		if (!book) { return res.status(404).json({ error: "not found" }); }
 
-		return res.json(book);
+		return saved(res, 200, book);
 	});
 
 	app.post("/api/playbooks/:id/state", (req, res) => {
+		let book;
+
 		try {
-			res.json(playbooks.setState(req.params.id, req.body && req.body.state));
+			book = playbooks.setState(req.params.id, req.body && req.body.state);
 		} catch (error) {
-			res.status(400).json({ error: error.message });
+			return res.status(400).json({ error: error.message });
 		}
+
+		return saved(res, 200, book);
 	});
 
 	app.post("/api/playbooks/:id/run", (req, res) => {
@@ -190,13 +203,13 @@ const createApp = () => {
 						return counts;
 					}, {})
 					: null);
-				res.json(result);
+				return saved(res, 200, result);
 			})
 			.catch((error) => { res.status(400).json({ error: error.message }); });
 	});
 
 	app.delete("/api/playbooks/:id", (req, res) => {
-		res.json({ removed: playbooks.remove(req.params.id) });
+		return saved(res, 200, { removed: playbooks.remove(req.params.id) });
 	});
 
 	// --- static frontend (the esbuild bundle) ---

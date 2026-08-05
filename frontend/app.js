@@ -489,6 +489,15 @@ const field = (label, control) => {
 	return el("div", { class: "field" }, el("label", {}, label), control);
 };
 
+// Category icon for a block `uses` (first segment), for the palette + nodes.
+const BLOCK_ICONS = {
+	dns: "🌐", http: "🌍", tls: "🔒", ip: "📍", mail: "✉", rdap: "📖", port: "🔌",
+	ct: "🔎", passive: "🔎", ti: "⚠", asn: "🛰", internetdb: "🛰", cert: "🔒",
+	url: "🔗", email: "✉", hash: "#", decode: "🔁", refang: "🧬", regex: "🔤",
+	map: "🗺", filter: "⛃", fanout: "💥", webhook: "🪝", js: "🧩", cli: "⌘", exif: "🖼"
+};
+const blockIcon = (uses) => { return BLOCK_ICONS[String(uses || "").split(".")[0]] || "◆"; };
+
 const builder = (data, ui) => {
 	const graph = ui.graph;
 
@@ -534,7 +543,7 @@ const builder = (data, ui) => {
 		el("div", { class: "port in" }),
 		el("div", { class: "port out" }),
 		el("div", { class: "kind" }, node.kind),
-		el("div", { class: "title" }, node.title),
+		el("div", { class: "title" }, (node.kind === "block" ? blockIcon(b.uses) + " " : "") + node.title),
 		el("div", { class: "sub" }, node.kind === "block" ? (() => { ui.frame; return b.uses; }) : node.sub),
 		el("div", { class: "meta" }, () => {
 			ui.frame;
@@ -783,12 +792,15 @@ const executionsView = (data, ui) => {
 	const all = (data.executions || []).filter((e) => { return !ui.openPlaybook || e.playbook === ui.openPlaybook; });
 
 	if (all.length === 0) {
+		const book = ui.playbooks.find((p) => { return p.id === ui.openPlaybook; });
+		const ranEmpty = book && book.last_run_at;
+		const sub = ranEmpty
+			? "The last run logged no block executions — the source found nothing to enrich (e.g. CT logs returned no certs for this target). Try another target or run again."
+			: "Every block run is logged here — input, output, whether it changed the entity, and timing. Run this playbook to populate it.";
+
 		return el("div", { class: "panel" }, emptyState(
-			"📋", "No executions yet",
-			"Every block run is logged here — input, output, whether it changed the entity, and timing. Run this playbook to populate it.",
-			ui.served
-				? { label: "▶ run once", onClick: () => { const b = ui.playbooks.find((p) => p.id === ui.openPlaybook); if (b) { pbRunNow(ui, b); } } }
-				: null));
+			"📋", ranEmpty ? "This run produced no executions" : "No executions yet", sub,
+			ui.served && book ? { label: "▶ run once", onClick: () => { pbRunNow(ui, book); } } : null));
 	}
 
 	const failed = failedEntries(all);
@@ -1160,16 +1172,24 @@ const playbookOverview = (data, ui) => {
 
 	const execs = (data.executions || []).filter((e) => { return e.playbook === book.id; });
 	const changed = execs.filter((e) => { return e.status === "ok" && e.changed; }).length;
+	const lastRun = book.last_run_at ? String(book.last_run_at).slice(0, 19).replace("T", " ") : "never";
+
+	const tile = (k, v, cls) => {
+		return el("div", { class: "m" }, el("div", { class: "k" }, k), el("div", { class: "v " + (cls || "") }, v));
+	};
 
 	const parts = [
 		el("div", { class: "pb-head" },
-			el("span", { class: "pill pill-pb-" + book.state }, book.state),
+			el("div", { class: "pb-title" },
+				el("span", { class: "pb-name" }, book.name),
+				el("span", { class: "pill pill-pb-" + book.state }, book.state)),
 			el("div", { class: "actions" }, pbActionButtons(ui, book, false))),
-		el("div", { class: "meta" },
-			el("span", {}, book.valid === false ? "✗ invalid" : "✓ valid"),
-			el("span", {}, "schedule: " + (book.schedule || "none")),
-			el("span", {}, book.last_run_at ? ("last run " + book.last_run_at) : "never run"),
-			el("span", {}, execs.length + " executions · " + changed + " changed"))
+		el("div", { class: "pb-meta" },
+			tile("valid", book.valid === false ? "✗ no" : "✓ yes", book.valid === false ? "warn" : "good"),
+			tile("schedule", book.schedule || "none"),
+			tile("last run", lastRun),
+			tile("executions", String(execs.length)),
+			tile("changed", String(changed)))
 	];
 
 	if (book.valid === false && book.errors && book.errors.length > 0) {

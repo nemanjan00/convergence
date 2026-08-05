@@ -37,6 +37,19 @@ const collectEntityDefs = () => {
 	return defs;
 };
 
+// Write the whole working set back to Mongo — the durable source of truth.
+// Called after every mutating API request and each scheduler tick, so a restart
+// hydrates exactly what the user last did (no data lost on reset).
+const persist = () => {
+	if (!persistence) { return Promise.resolve(); }
+
+	return Promise.all([
+		persistence.save(store, Object.keys(store._collections)),
+		persistence.saveJournal(journal),
+		persistence.savePlaybooks(playbooks)
+	]);
+};
+
 // One scheduler tick: converge every active playbook (shared store accumulates),
 // record each outcome, persist. Tolerant per-playbook.
 const tick = () => {
@@ -52,15 +65,7 @@ const tick = () => {
 				})
 				.catch((error) => { playbooks.recordRun(book.id, { error: error.message }); });
 		});
-	}, Promise.resolve()).then(() => {
-		if (!persistence) { return null; }
-
-		return Promise.all([
-			persistence.save(store, Object.keys(store._collections)),
-			persistence.saveJournal(journal),
-			persistence.savePlaybooks(playbooks)
-		]);
-	});
+	}, Promise.resolve()).then(persist);
 };
 
 const hydrate = persistence
@@ -75,7 +80,7 @@ const hydrate = persistence
 	: Promise.resolve();
 
 hydrate.then(() => {
-	const app = createApp();
+	const app = createApp({ persist: persist });
 
 	const server = app.listen(PORT, () => {
 		console.log("convergence API + UI on http://localhost:" + PORT);
