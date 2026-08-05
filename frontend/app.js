@@ -827,11 +827,19 @@ const playbooksView = (data, ui) => {
 		ui.frame = ui.frame + 1;
 	};
 
+	// Run a playbook now (served): converge it once, then reload — you'll see its
+	// entities in Explorer/Graph and rows in Executions.
+	const runNow = (book) => {
+		if (!ui.served) { return; }
+		ui.api("POST", "/api/playbooks/" + book.id + "/run").then(ui.refresh);
+	};
+
 	const table = el("div", { class: "scroll" },
 		el("table", {},
 			el("thead", {}, el("tr", {},
 				el("th", {}, "name"), el("th", {}, "state"),
-				el("th", {}, "schedule"), el("th", {}, "valid"), el("th", {}, "last run"))),
+				el("th", {}, "schedule"), el("th", {}, "valid"), el("th", {}, "last run"),
+				el("th", {}, ""))),
 			el("tbody", {}, () => {
 				ui.frame;
 
@@ -848,7 +856,13 @@ const playbooksView = (data, ui) => {
 					}, book.state)),
 					el("td", { "data-label": "schedule" }, el("div", { class: "val" }, book.schedule || "—")),
 					el("td", { "data-label": "valid" }, el("div", { class: "val" }, book.valid === false ? "✗" : "✓")),
-					el("td", { "data-label": "last run" }, el("div", { class: "val" }, book.last_run_at || "—")));
+					el("td", { "data-label": "last run" }, el("div", { class: "val" }, book.last_run_at || "—")),
+					el("td", { "data-label": "" }, ui.served
+						? el("button", {
+							class: "rerun", title: "run this playbook now",
+							onclick: (e) => { e.stopPropagation(); runNow(book); }
+						}, "▶ run")
+						: el("span", { class: "muted" }, "—")));
 				}));
 			})
 		)
@@ -976,11 +990,18 @@ export const render = (root, data) => {
 			schedule: null, valid: true, yaml: data.yaml, last_run_at: null
 		}] : []);
 
+	// Land on Explorer when there's data to explore, otherwise on Playbooks (the
+	// home) — a fresh served app has no entities until a playbook runs. A refresh
+	// passes __view to stay put.
+	const hasEntities = Object.keys(data.entities || {}).some((type) => {
+		return (data.entities[type] || []).length > 0;
+	});
+
 	const ui = state({
-		view: "explorer",
+		view: data.__view || (hasEntities ? "explorer" : "playbooks"),
 		served: Boolean(data.__served),
 		playbooks: seedPlaybooks,
-		pbSel: null,
+		pbSel: data.__pbSel || null,
 		pbExport: null,
 		pbImportText: "",
 		type: entityTypes.indexOf("host") !== -1 ? "host" : entityTypes[0],
@@ -1031,6 +1052,10 @@ export const render = (root, data) => {
 			.then((response) => { return response.json(); })
 			.then((fresh) => {
 				fresh.__served = true;
+				// Preserve where the user was (view + selected playbook) across the
+				// re-render, so an action doesn't bounce them to another tab.
+				fresh.__view = ui.view;
+				fresh.__pbSel = ui.pbSel;
 				root.innerHTML = "";
 				render(root, fresh);
 			});
@@ -1046,15 +1071,17 @@ export const render = (root, data) => {
 	});
 	document.addEventListener("pointerup", () => { ui.drag = null; });
 
+	// Playbooks first — it's the home (pick/import/activate a flow); the rest show
+	// what your active playbooks have discovered.
 	const tabs = el("div", { class: "tabs" },
+		el("button", {
+			class: () => (ui.view === "playbooks" ? "tab active" : "tab"),
+			onclick: () => { ui.view = "playbooks"; }
+		}, "Playbooks (" + ui.playbooks.length + ")"),
 		el("button", {
 			class: () => (ui.view === "explorer" ? "tab active" : "tab"),
 			onclick: () => { ui.view = "explorer"; }
 		}, "Explorer"),
-		el("button", {
-			class: () => (ui.view === "builder" ? "tab active" : "tab"),
-			onclick: () => { ui.view = "builder"; }
-		}, "Flow builder"),
 		el("button", {
 			class: () => (ui.view === "graph" ? "tab active" : "tab"),
 			onclick: () => { ui.view = "graph"; }
@@ -1064,9 +1091,9 @@ export const render = (root, data) => {
 			onclick: () => { ui.view = "executions"; }
 		}, "Executions (" + ((data.executions || []).length) + ")"),
 		el("button", {
-			class: () => (ui.view === "playbooks" ? "tab active" : "tab"),
-			onclick: () => { ui.view = "playbooks"; }
-		}, "Playbooks")
+			class: () => (ui.view === "builder" ? "tab active" : "tab"),
+			onclick: () => { ui.view = "builder"; }
+		}, "Flow builder")
 	);
 
 	const views = {

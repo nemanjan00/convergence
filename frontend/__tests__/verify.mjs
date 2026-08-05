@@ -146,7 +146,7 @@ if (detailText.indexOf("input") === -1 || detailText.indexOf("output") === -1) {
 // Playbooks: switch, confirm a row + a lifecycle pill render, and that cycling
 // the state changes the pill class (draft -> active -> paused).
 const pbTab = Array.from(document.querySelectorAll(".tab"))
-	.find((t) => t.textContent === "Playbooks");
+	.find((t) => t.textContent.indexOf("Playbooks") !== -1);
 pbTab.click();
 
 const pbRows = document.querySelectorAll("tbody tr.row").length;
