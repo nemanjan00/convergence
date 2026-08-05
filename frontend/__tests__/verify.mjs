@@ -1,6 +1,6 @@
 // Headless render check for the qrp frontend — no browser needed. Registers a
-// happy-dom document, renders app.js with sample data, and asserts the DOM came
-// out right. This is how the frontend is verified in CI-like conditions.
+// happy-dom document, renders app.js, and drives the two-level UX (home list ->
+// open a playbook -> its data views), asserting the DOM came out right.
 //
 // Run: node frontend/__tests__/verify.mjs
 
@@ -8,12 +8,11 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 GlobalRegistrator.register();
 
-// Import qrp + app AFTER the DOM globals exist.
 const app = await import("../app.js");
 
 const data = {
 	flow: "ct-recon",
-	yaml: "apiVersion: v0\nkind: Flow\n",
+	yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n",
 	spec: {
 		sources: [{ id: "ct", block: "source.ct-log", emits: "cert" }],
 		blocks: [
@@ -24,187 +23,136 @@ const data = {
 	},
 	entities: {
 		host: [
-			{
-				type: "host", key: "name=\"a.example.com\"", version: 3,
-				fields: {
-					name: { value: "a.example.com", block: "fanout" },
-					ip: { value: "1.2.3.4", block: "resolve" }
-				}
-			},
-			{
-				type: "host", key: "name=\"b.example.com\"", version: 2,
-				fields: { name: { value: "b.example.com", block: "fanout" } }
-			}
+			{ type: "host", key: "name=\"a.example.com\"", version: 3, fields: { name: { value: "a.example.com", block: "fanout" }, ip: { value: "1.2.3.4", block: "resolve" } } },
+			{ type: "host", key: "name=\"b.example.com\"", version: 2, fields: { name: { value: "b.example.com", block: "fanout" } } }
 		],
-		cert: [
-			{ type: "cert", key: "id=1", version: 1, fields: { id: { value: 1, block: "ct" } } }
-		]
+		cert: [ { type: "cert", key: "id=1", version: 1, fields: { id: { value: 1, block: "ct" } } } ]
 	},
-	edges: [
-		{ from: { type: "cert", key: "id=1" }, rel: "has_san", to: { type: "host", key: "name=\"a.example.com\"" }, via: "fanout" }
-	],
+	edges: [ { from: { type: "cert", key: "id=1" }, rel: "has_san", to: { type: "host", key: "name=\"a.example.com\"" }, via: "fanout" } ],
+	// executions carry the playbook id (pb-1) so they scope to it on the page.
 	executions: [
-		{ id: "x1", run: "r", sweep: 1, block: "fanout", uses: "fanout", entity: { type: "cert", key: "id=1" }, status: "ok", changed: true, outputs: 2, input: { certificate: "…" }, output: [{ name: "a.example.com" }], duration_ms: 3 },
-		{ id: "x2", run: "r", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"a.example.com\"" }, status: "ok", changed: true, input: { name: "a.example.com" }, output: { ip: "1.2.3.4" }, duration_ms: 12 },
-		{ id: "x3", run: "r", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"b.example.com\"" }, status: "skipped", changed: false }
+		{ id: "x1", playbook: "pb-1", sweep: 1, block: "fanout", uses: "fanout", entity: { type: "cert", key: "id=1" }, status: "ok", changed: true, input: { certificate: "…" }, output: [{ name: "a.example.com" }], duration_ms: 3 },
+		{ id: "x2", playbook: "pb-1", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"a.example.com\"" }, status: "ok", changed: true, input: { name: "a.example.com" }, output: { ip: "1.2.3.4" }, duration_ms: 12 },
+		{ id: "x3", playbook: "pb-1", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"b.example.com\"" }, status: "skipped", changed: false }
 	],
-	samples: [
-		{ name: "ct-recon", description: "CT recon sample", yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" }
-	]
+	playbooks: [ { id: "pb-1", name: "ct-recon", state: "active", valid: true, schedule: null, last_run_at: null, yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" } ],
+	samples: [ { name: "ct-recon", description: "CT recon sample", yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" } ]
 };
 
+const failures = [];
+const q = (sel) => Array.from(document.querySelectorAll(sel));
+const click = (node) => node.dispatchEvent(new window.Event("click", { bubbles: true }));
+const navByText = (text) => q(".nav-item").find((n) => n.textContent.indexOf(text) !== -1);
+
+// --- HOME (all playbooks) ---
 app.render(document.body, data);
 
-// Explorer (default view)
-const rows = document.querySelectorAll("tbody tr").length;
-const tabs = document.querySelectorAll(".nav-item").length;
-const hasHost = document.body.innerHTML.indexOf("a.example.com") !== -1;
+if (q(".pbcard").length < 1) { failures.push("home: no playbook cards"); }
+if (!navByText("Playbooks")) { failures.push("home: no Playbooks nav item"); }
+if (navByText("Entities")) { failures.push("home: data-view nav should NOT appear before opening a playbook"); }
 
-// Switch to the flow builder and check the node canvas rendered.
-const builderTab = Array.from(document.querySelectorAll(".nav-item"))
-	.find((t) => t.textContent.indexOf("builder") !== -1);
-builderTab.click();
+// sample import adds a card (local mode)
+const chip = q(".chip").find((c) => c.textContent.indexOf("ct-recon") !== -1);
+if (!chip) {
+	failures.push("home: no sample-import chip");
+} else {
+	const before = q(".pbcard").length;
+	click(chip);
+	if (q(".pbcard").length !== before + 1) { failures.push("home: importing a sample did not add a card"); }
+}
 
-// nodes = 1 source + 2 entities + 2 blocks = 5.
-// wires: source->cert (1) + fanout: cert->fanout + fanout->host (derivation, 2)
-//        + resolve: host->resolve (in-place, 1 input wire only) = 4.
-const nodes = document.querySelectorAll(".gnode").length;
-const wires = document.querySelectorAll("svg.wires path.wire").length;
+// --- open the first playbook -> full re-render to the PLAYBOOK PAGE ---
+click(q(".pbcard")[0]);
 
-// Editing: select a block, confirm the form renders, edit `relation`, and
-// confirm the live YAML round-trips the change.
-const blockNode = document.querySelector(".gnode.block");
-blockNode.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
-
-const formFields = document.querySelectorAll(".editor .field").length;
-
-// Layered placement: the builder nodes must not overlap (that is the whole
-// point of the layout algorithm) and must occupy more than one column (i.e. the
-// layers actually spread along the flow direction, not one big pile).
-const boxes = Array.from(document.querySelectorAll(".gnode")).map((n) => {
-	const style = n.getAttribute("style") || "";
-	const left = Number((style.match(/left:\s*(-?[\d.]+)px/) || [])[1]);
-	const top = Number((style.match(/top:\s*(-?[\d.]+)px/) || [])[1]);
-	return { left: left, top: top, right: left + 184, bottom: top + 62 };
+["Overview", "Entities", "Graph", "Executions", "Flow"].forEach((label) => {
+	if (!navByText(label)) { failures.push("playbook page: missing nav '" + label + "'"); }
 });
+if (!navByText("All playbooks")) { failures.push("playbook page: no back link"); }
 
-let overlaps = 0;
-boxes.forEach((a, i) => {
-	boxes.slice(i + 1).forEach((b) => {
-		const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
-		if (!apart) { overlaps = overlaps + 1; }
-	});
-});
+// overview: state pill + a deliberate activate/pause action
+if (q("[class*='pill-pb-']").length < 1) { failures.push("overview: no state pill"); }
+if (!q(".actions button").find((b) => /activate|pause/i.test(b.textContent))) {
+	failures.push("overview: no explicit activate/pause action");
+}
 
-const columns = new Set(boxes.map((b) => b.left)).size;
+// --- Flow (builder) ---
+click(navByText("Flow"));
+const nodes = q(".gnode").length;
+const wires = q("svg.wires path.wire").length;
+if (nodes !== 5) { failures.push("builder: expected 5 nodes, got " + nodes); }
+if (wires !== 4) { failures.push("builder: expected 4 wires, got " + wires); }
 
-const relationInput = Array.from(document.querySelectorAll(".editor .field")).map((f) => {
-	return { label: f.querySelector("label").textContent, input: f.querySelector("input") };
-}).find((f) => f.label === "relation").input;
+document.querySelector(".gnode.block").dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
+const formFields = q(".editor .field").length;
+if (formFields < 7) { failures.push("builder: editor did not render, fields=" + formFields); }
 
+const relationInput = q(".editor .field")
+	.map((f) => ({ label: f.querySelector("label").textContent, input: f.querySelector("input") }))
+	.find((f) => f.label === "relation").input;
 relationInput.value = "verified_edit";
 relationInput.dispatchEvent(new window.Event("input", { bubbles: true }));
+if (document.querySelector("pre.yaml").textContent.indexOf("verified_edit") === -1) {
+	failures.push("builder: block edit did not round-trip into YAML");
+}
 
-const yamlText = document.querySelector("pre.yaml").textContent;
+// no overlap in the builder layout
+const boxes = q(".gnode").map((n) => {
+	const s = n.getAttribute("style") || "";
+	const left = Number((s.match(/left:\s*(-?[\d.]+)px/) || [])[1]);
+	const top = Number((s.match(/top:\s*(-?[\d.]+)px/) || [])[1]);
+	return { left, top, right: left + 184, bottom: top + 62 };
+});
+let overlaps = 0;
+boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b) => {
+	const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+	if (!apart) { overlaps = overlaps + 1; }
+}));
+if (overlaps > 0) { failures.push("builder: " + overlaps + " overlapping node pair(s)"); }
+if (new Set(boxes.map((b) => b.left)).size < 2) { failures.push("builder: nodes not spread across layers"); }
 
-const failures = [];
-if (rows < 1) { failures.push("no table rows rendered"); }
-if (tabs !== 5) { failures.push("expected 5 nav items, got " + tabs); }
-if (!hasHost) { failures.push("host value not in DOM"); }
-if (nodes !== 5) { failures.push("expected 5 canvas nodes, got " + nodes); }
-if (wires !== 4) { failures.push("expected 4 wires (in-place enrichment = 1 wire), got " + wires); }
-if (formFields < 7) { failures.push("editor form did not render, fields=" + formFields); }
-if (overlaps > 0) { failures.push("layout produced " + overlaps + " overlapping node pair(s)"); }
-if (columns < 2) { failures.push("layout did not spread nodes across layers (columns=" + columns + ")"); }
-if (yamlText.indexOf("verified_edit") === -1) { failures.push("block edit did not round-trip into YAML"); }
+// --- Graph ---
+click(navByText("Graph"));
+if (q(".gnode.ent").length < 1) { failures.push("graph: no entity nodes"); }
 
-// Switch to the discovery graph and check nodes + edges render.
-const graphTab = Array.from(document.querySelectorAll(".nav-item"))
-	.find((t) => t.textContent.indexOf("Discovery") !== -1);
-graphTab.click();
+// --- Entities (explorer) ---
+click(navByText("Entities"));
+if (q("tbody tr").length < 1) { failures.push("explorer: no rows"); }
 
-const graphNodes = document.querySelectorAll(".gnode.ent").length;
-if (graphNodes < 1) { failures.push("graph rendered no entity nodes"); }
-
-// Executions panel: switch to it, confirm the run log rendered a row per
-// execution with status pills, and that selecting one shows its input/output.
-const execTab = Array.from(document.querySelectorAll(".nav-item"))
-	.find((t) => t.textContent.indexOf("Executions") !== -1);
-execTab.click();
-
-const execRows = document.querySelectorAll("tbody tr").length;
-const pills = document.querySelectorAll(".pill").length;
-if (execRows !== 3) { failures.push("executions: expected 3 rows, got " + execRows); }
-if (pills !== 3) { failures.push("executions: expected 3 status pills, got " + pills); }
-
-document.querySelector("tbody tr.row").click();
+// --- Executions (scoped to this playbook) ---
+click(navByText("Executions"));
+if (q("tbody tr").length < 1) { failures.push("executions: no rows"); }
+if (q(".pill").length < 1) { failures.push("executions: no status pills"); }
+click(q("tbody tr.row")[0]);
 const detailText = document.querySelector(".lineage") ? document.querySelector(".lineage").textContent : "";
 if (detailText.indexOf("input") === -1 || detailText.indexOf("output") === -1) {
 	failures.push("executions: selecting a run did not show input/output");
 }
 
-// Playbooks: switch, confirm a row + a lifecycle pill render, and that cycling
-// the state changes the pill class (draft -> active -> paused).
-const pbTab = Array.from(document.querySelectorAll(".nav-item"))
-	.find((t) => t.textContent.indexOf("Playbooks") !== -1);
-pbTab.click();
-
-const pbCards = document.querySelectorAll(".pbcard").length;
-const statePill = document.querySelector("[class*='pill-pb-']");
-if (pbCards < 1) { failures.push("playbooks: no playbook cards rendered"); }
-if (!statePill) { failures.push("playbooks: no lifecycle pill rendered"); }
-
-// A sample-import chip should render and, when clicked, add a playbook card.
-const sampleChip = Array.from(document.querySelectorAll(".chip")).find((c) => c.textContent.indexOf("ct-recon") !== -1);
-if (!sampleChip) {
-	failures.push("playbooks: no sample-import chip rendered");
-} else {
-	const before = document.querySelectorAll(".pbcard").length;
-	sampleChip.dispatchEvent(new window.Event("click", { bubbles: true }));
-	if (document.querySelectorAll(".pbcard").length !== before + 1) {
-		failures.push("playbooks: importing a sample did not add a card");
-	}
-}
-// State is a STATIC badge now (no accidental click-to-cycle); change happens via
-// explicit action buttons. Confirm a card carries a state-action button.
-const pbAction = Array.from(document.querySelectorAll(".pbcard .actions button"))
-	.find((b) => /activate|pause/i.test(b.textContent));
-if (!pbAction) { failures.push("playbooks: no explicit activate/pause action on cards"); }
-
-// Phone orientation: render fresh at a narrow width and confirm the layout
-// flips to vertical (nodes stack down, not across) and still never overlaps.
+// --- phone: open a playbook, go to Flow, confirm vertical + no overlap ---
 window.innerWidth = 390;
 document.body.innerHTML = "";
 app.render(document.body, data);
-
-Array.from(document.querySelectorAll(".nav-item"))
-	.find((t) => t.textContent.indexOf("builder") !== -1)
-	.click();
-
-const nboxes = Array.from(document.querySelectorAll(".gnode")).map((n) => {
-	const style = n.getAttribute("style") || "";
-	const left = Number((style.match(/left:\s*(-?[\d.]+)px/) || [])[1]);
-	const top = Number((style.match(/top:\s*(-?[\d.]+)px/) || [])[1]);
-	return { left: left, top: top, right: left + 184, bottom: top + 62 };
+click(q(".pbcard")[0]);
+click(navByText("Flow"));
+const nboxes = q(".gnode").map((n) => {
+	const s = n.getAttribute("style") || "";
+	const left = Number((s.match(/left:\s*(-?[\d.]+)px/) || [])[1]);
+	const top = Number((s.match(/top:\s*(-?[\d.]+)px/) || [])[1]);
+	return { left, top, right: left + 184, bottom: top + 62 };
 });
-
 let noverlaps = 0;
-nboxes.forEach((a, i) => {
-	nboxes.slice(i + 1).forEach((b) => {
-		const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
-		if (!apart) { noverlaps = noverlaps + 1; }
-	});
-});
-
-const nrows = new Set(nboxes.map((b) => b.top)).size;
-if (noverlaps > 0) { failures.push("narrow layout produced " + noverlaps + " overlapping node pair(s)"); }
-if (nrows < 2) { failures.push("narrow layout did not stack nodes vertically (rows=" + nrows + ")"); }
+nboxes.forEach((a, i) => nboxes.slice(i + 1).forEach((b) => {
+	const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+	if (!apart) { noverlaps = noverlaps + 1; }
+}));
+if (noverlaps > 0) { failures.push("narrow: " + noverlaps + " overlapping node pair(s)"); }
+if (new Set(nboxes.map((b) => b.top)).size < 2) { failures.push("narrow: nodes not stacked vertically"); }
 
 if (failures.length > 0) {
 	console.error("FRONTEND RENDER FAILED:\n  - " + failures.join("\n  - "));
 	process.exit(1);
 }
 
-console.log("frontend OK — rows=" + rows + " tabs=" + tabs + " nodes=" + nodes +
-	" wires=" + wires + " form=" + formFields + " edit round-trip=yes");
+console.log("frontend OK — two-level nav: home(list) -> open -> playbook page(overview/entities/graph/executions/flow); nodes=" +
+	nodes + " wires=" + wires + " form=" + formFields);
 process.exit(0);

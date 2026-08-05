@@ -710,13 +710,17 @@ const matchesStatus = (entry, filter) => {
 };
 
 const executionsView = (data, ui) => {
-	const all = data.executions || [];
+	// Scoped to the open playbook (executions carry their playbook id); global on
+	// the home level.
+	const all = (data.executions || []).filter((e) => { return !ui.openPlaybook || e.playbook === ui.openPlaybook; });
 
 	if (all.length === 0) {
 		return el("div", { class: "panel" }, emptyState(
 			"📋", "No executions yet",
-			"Every block run is logged here — input, output, whether it changed the entity, and timing. Run a playbook to populate it.",
-			{ label: "Go to Playbooks", onClick: () => { ui.view = "playbooks"; } }));
+			"Every block run is logged here — input, output, whether it changed the entity, and timing. Run this playbook to populate it.",
+			ui.served
+				? { label: "▶ run once", onClick: () => { const b = ui.playbooks.find((p) => p.id === ui.openPlaybook); if (b) { pbRunNow(ui, b); } } }
+				: null));
 	}
 
 	const failed = failedEntries(all);
@@ -881,190 +885,190 @@ const nameFromYaml = (yaml) => {
 	return match ? match[1] : "imported";
 };
 
-const playbooksView = (data, ui) => {
-	// Deliberate state change (no accidental one-click cycling). Activating starts
-	// live recon on a schedule, so it asks first.
-	const setState = (book, target) => {
-		if (target === "active" && typeof window !== "undefined" && window.confirm) {
-			const ok = window.confirm("Activate \"" + book.name +
-				"\"?\n\nIt will run on its schedule and perform live reconnaissance against its targets.");
-			if (!ok) { return; }
-		}
+// --- Playbook actions (shared by the list and the per-playbook overview) ---
 
+// Deliberate state change (no accidental one-click cycling). Activating starts
+// live recon on a schedule, so it confirms first.
+const pbSetState = (ui, book, target) => {
+	if (target === "active" && typeof window !== "undefined" && window.confirm) {
+		const ok = window.confirm("Activate \"" + book.name +
+			"\"?\n\nIt will run on its schedule and perform live reconnaissance against its targets.");
+		if (!ok) { return; }
+	}
+
+	if (ui.served) {
+		ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: target }).then(ui.refresh);
+		return;
+	}
+
+	book.state = target;
+	ui.frame = ui.frame + 1;
+};
+
+const pbRunNow = (ui, book) => {
+	if (!ui.served) { return; }
+	ui.api("POST", "/api/playbooks/" + book.id + "/run").then(ui.refresh);
+};
+
+const pbActivateAttrs = (ui, book, stop) => {
+	const attrs = {
+		class: "btn btn-ghost", title: "schedule + run this playbook",
+		onclick: (e) => { if (stop) { e.stopPropagation(); } pbSetState(ui, book, "active"); }
+	};
+
+	if (book.valid === false) {
+		attrs.disabled = true;
+		attrs.title = "fix validation errors before activating";
+	}
+
+	return attrs;
+};
+
+// The activate/pause + run-once action buttons for a playbook. `stop` guards the
+// clicks from bubbling to a card's open-on-click.
+const pbActionButtons = (ui, book, stop) => {
+	const guard = (fn) => { return (e) => { if (stop) { e.stopPropagation(); } fn(); }; };
+
+	return [
+		(book.state === "active")
+			? el("button", { class: "btn btn-ghost", title: "stop scheduling",
+				onclick: guard(() => { pbSetState(ui, book, "paused"); }) }, "⏸ pause")
+			: el("button", pbActivateAttrs(ui, book, stop), "⚡ activate"),
+		ui.served
+			? el("button", { class: "btn btn-accent", title: "converge once now",
+				onclick: guard(() => { pbRunNow(ui, book); }) }, "▶ run once")
+			: el("span", {})
+	];
+};
+
+// Import controls (sample gallery + paste box) — the "new playbook" affordances,
+// shared by the empty state and the list footer.
+const importControls = (data, ui) => {
+	const addDraft = (name, yaml, schedule) => {
 		if (ui.served) {
-			ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: target }).then(ui.refresh);
-			return;
-		}
-
-		book.state = target;
-		ui.frame = ui.frame + 1;
-	};
-
-	// Run a playbook now (served): converge it once, then reload — you'll see its
-	// entities in Explorer/Graph and rows in Executions.
-	const runNow = (book) => {
-		if (!ui.served) { return; }
-		ui.api("POST", "/api/playbooks/" + book.id + "/run").then(ui.refresh);
-	};
-
-	// Attrs for the "activate" button — disabled (can't schedule) when invalid.
-	const activateAttrs = (book) => {
-		const attrs = {
-			class: "btn btn-ghost", title: "schedule + run this playbook",
-			onclick: (e) => { e.stopPropagation(); setState(book, "active"); }
-		};
-
-		if (book.valid === false) {
-			attrs.disabled = true;
-			attrs.title = "fix validation errors before activating";
-		}
-
-		return attrs;
-	};
-
-	const exportBook = (book) => {
-		ui.pbSel = book.id;
-		ui.pbExport = JSON.stringify(
-			{ convergencePlaybook: 1, name: book.name, schedule: book.schedule, yaml: book.yaml }, null, 2);
-		ui.frame = ui.frame + 1;
-	};
-
-	const cards = el("div", { class: "pbgrid" }, () => {
-		ui.frame;
-
-		return el("g", {}, ui.playbooks.map((book) => {
-			return el("div", {
-				class: () => "pbcard" + (ui.pbSel === book.id ? " sel" : ""),
-				onclick: () => { ui.pbSel = book.id; ui.pbExport = null; ui.frame = ui.frame + 1; }
-			},
-			el("div", { class: "top" },
-				el("div", { class: "nm" }, book.name),
-				// Static badge — state is changed via the explicit buttons below.
-				el("span", { class: "pill pill-pb-" + book.state }, book.state)),
-			el("div", { class: "meta" },
-				el("span", {}, book.valid === false ? "✗ invalid" : "✓ valid"),
-				el("span", {}, book.schedule || "no schedule"),
-				el("span", {}, book.last_run_at ? ("ran " + String(book.last_run_at).slice(0, 10)) : "never run")),
-			el("div", { class: "actions" },
-				(book.state === "active")
-					? el("button", { class: "btn btn-ghost", title: "stop scheduling",
-						onclick: (e) => { e.stopPropagation(); setState(book, "paused"); } }, "⏸ pause")
-					: el("button", activateAttrs(book), "⚡ activate"),
-				ui.served
-					? el("button", { class: "btn btn-accent", title: "converge once now",
-						onclick: (e) => { e.stopPropagation(); runNow(book); } }, "▶ run once")
-					: el("span", {}),
-				el("button", { class: "btn btn-ghost", title: "export portable artifact",
-					onclick: (e) => { e.stopPropagation(); exportBook(book); } }, "⇩ export")));
-		}));
-	});
-
-	const detail = el("div", { class: "lineage" }, () => {
-		ui.frame;
-
-		if (!ui.pbSel) {
-			return el("p", { class: "muted" }, "select a playbook — cycle its state, or export it");
-		}
-
-		const book = ui.playbooks.find((b) => b.id === ui.pbSel);
-
-		if (!book) {
-			return el("p", { class: "muted" }, "gone");
-		}
-
-		const parts = [
-			el("button", { class: "rerun", onclick: () => { ui.pbExport = JSON.stringify({ convergencePlaybook: 1, name: book.name, schedule: book.schedule, yaml: book.yaml }, null, 2); ui.frame = ui.frame + 1; } }, "⇩ export")
-		];
-
-		if (ui.pbExport) {
-			parts.push(el("h3", {}, "portable artifact"));
-			parts.push(el("pre", {}, ui.pbExport));
-		}
-
-		parts.push(el("h3", {}, "flow yaml"));
-		parts.push(el("pre", { class: "yaml" }, book.yaml || "(empty)"));
-
-		return el("div", {}, parts);
-	});
-
-	// Import: paste a portable artifact JSON or a bare flow YAML.
-	const importBox = el("textarea", {
-		class: "in", placeholder: "paste a playbook artifact (JSON) or a flow YAML…",
-		oninput: (e) => { ui.pbImportText = e.target.value; }
-	});
-
-	const importBtn = el("button", { class: "rerun", onclick: () => {
-		const text = String(ui.pbImportText || "").trim();
-		if (!text) { return; }
-
-		let name;
-		let yaml;
-		let schedule = null;
-
-		try {
-			const parsed = JSON.parse(text);
-			yaml = parsed.yaml || "";
-			name = parsed.name || nameFromYaml(yaml);
-			schedule = parsed.schedule || null;
-		} catch {
-			yaml = text;
-			name = nameFromYaml(text);
-		}
-
-		if (ui.served) {
-			ui.api("POST", "/api/playbooks/import", { name: name, schedule: schedule, yaml: yaml })
+			ui.api("POST", "/api/playbooks/import", { name: name, schedule: schedule || null, yaml: yaml })
 				.then(() => { ui.pbImportText = ""; return ui.refresh(); });
 			return;
 		}
 
 		ui.playbooks.push({
-			id: "pb-" + (ui.playbooks.length + 1),
-			name: name, state: "draft", schedule: schedule, valid: true, yaml: yaml, last_run_at: null
+			id: "pb-" + (ui.playbooks.length + 1), name: name, state: "draft",
+			schedule: schedule || null, valid: true, yaml: yaml, last_run_at: null
 		});
 		ui.pbImportText = "";
 		ui.frame = ui.frame + 1;
-	} }, "⇧ import as draft");
+	};
 
-	// Sample gallery: one-click import of the bundled example flows.
 	const samplesEl = el("div", { class: "chips" }, (data.samples || []).map((sample) => {
-		return el("button", {
-			class: "chip", title: sample.description || sample.name,
-			onclick: () => {
-				if (ui.served) {
-					ui.api("POST", "/api/playbooks/import", { name: sample.name, yaml: sample.yaml }).then(ui.refresh);
-					return;
-				}
-
-				ui.playbooks.push({
-					id: "pb-" + (ui.playbooks.length + 1), name: sample.name, state: "draft",
-					schedule: null, valid: true, yaml: sample.yaml, last_run_at: null
-				});
-				ui.frame = ui.frame + 1;
-			}
-		}, "＋ " + sample.name);
+		return el("button", { class: "chip", title: sample.description || sample.name,
+			onclick: () => { addDraft(sample.name, sample.yaml, null); } }, "＋ " + sample.name);
 	}));
 
-	const startHere = el("div", {},
+	const importBox = el("textarea", {
+		class: "in", placeholder: "paste a playbook artifact (JSON) or a flow YAML…",
+		oninput: (e) => { ui.pbImportText = e.target.value; }
+	});
+
+	const importBtn = el("button", { class: "btn", onclick: () => {
+		const text = String(ui.pbImportText || "").trim();
+		if (!text) { return; }
+
+		try {
+			const parsed = JSON.parse(text);
+			addDraft(parsed.name || nameFromYaml(parsed.yaml || ""), parsed.yaml || "", parsed.schedule || null);
+		} catch {
+			addDraft(nameFromYaml(text), text, null);
+		}
+	} }, "⇧ import as draft");
+
+	return el("div", {},
 		el("h3", {}, "start from a sample"),
-		(data.samples && data.samples.length > 0)
-			? samplesEl
-			: el("p", { class: "muted" }, "no samples bundled"),
+		(data.samples && data.samples.length > 0) ? samplesEl : el("p", { class: "muted" }, "no samples bundled"),
 		el("h3", {}, "or import a flow"),
 		el("div", { class: "editor" }, importBox, importBtn));
+};
 
-	// No playbooks at all -> a welcoming empty state, samples front and centre.
+// TOP LEVEL: the list of all playbooks. A card OPENS its workspace.
+const playbooksView = (data, ui) => {
+	const cards = el("div", { class: "pbgrid" }, () => {
+		ui.frame;
+
+		return el("g", {}, ui.playbooks.map((book) => {
+			return el("div", {
+				class: "pbcard",
+				title: "open " + book.name,
+				onclick: () => { ui.openBook(book.id); }
+			},
+			el("div", { class: "top" },
+				el("div", { class: "nm" }, book.name),
+				el("span", { class: "pill pill-pb-" + book.state }, book.state)),
+			el("div", { class: "meta" },
+				el("span", {}, book.valid === false ? "✗ invalid" : "✓ valid"),
+				el("span", {}, book.schedule || "no schedule"),
+				el("span", {}, book.last_run_at ? ("ran " + String(book.last_run_at).slice(0, 10)) : "never run")),
+			el("div", { class: "actions" }, pbActionButtons(ui, book, true).concat([
+				el("button", { class: "btn btn-ghost", title: "open workspace",
+					onclick: (e) => { e.stopPropagation(); ui.openBook(book.id); } }, "open →")
+			])));
+		}));
+	});
+
 	if (ui.playbooks.length === 0) {
 		return el("div", { class: "panel" },
 			emptyState("📚", "No playbooks yet",
 				"A playbook is a saved flow with a draft → active → paused lifecycle. Start from a sample below, or paste one to import."),
-			startHere);
+			importControls(data, ui));
 	}
 
 	return el("div", { class: "panel" },
-		el("div", { class: "hint" }, "your saved flows — " + (ui.served ? "▶ run one" : "click a state to cycle") + " draft → active → paused; the data lands in Explorer · Graph · Executions"),
+		el("div", { class: "hint" }, "your saved flows — click one to open its workspace (overview · entities · graph · executions · flow)"),
 		cards,
-		startHere,
-		el("h3", {}, "detail"), detail);
+		importControls(data, ui));
+};
+
+// SECOND LEVEL: one playbook's overview (its config + run summary).
+const playbookOverview = (data, ui) => {
+	const book = ui.playbooks.find((b) => { return b.id === ui.openPlaybook; });
+
+	if (!book) {
+		return el("div", { class: "panel" }, emptyState("🗂️", "Playbook not found",
+			"It may have been removed.", { label: "Back to Playbooks", onClick: () => { ui.closeBook(); } }));
+	}
+
+	const execs = (data.executions || []).filter((e) => { return e.playbook === book.id; });
+	const changed = execs.filter((e) => { return e.status === "ok" && e.changed; }).length;
+
+	const parts = [
+		el("div", { class: "pb-head" },
+			el("span", { class: "pill pill-pb-" + book.state }, book.state),
+			el("div", { class: "actions" }, pbActionButtons(ui, book, false))),
+		el("div", { class: "meta" },
+			el("span", {}, book.valid === false ? "✗ invalid" : "✓ valid"),
+			el("span", {}, "schedule: " + (book.schedule || "none")),
+			el("span", {}, book.last_run_at ? ("last run " + book.last_run_at) : "never run"),
+			el("span", {}, execs.length + " executions · " + changed + " changed"))
+	];
+
+	if (book.valid === false && book.errors && book.errors.length > 0) {
+		parts.push(el("h3", {}, "validation errors"));
+		parts.push(el("ul", { class: "err-pre" }, book.errors.map((e) => { return el("li", {}, e); })));
+	}
+
+	parts.push(el("div", { class: "actions" },
+		el("button", { class: "btn btn-ghost", onclick: () => {
+			ui.pbExport = ui.pbExport ? null : JSON.stringify(
+				{ convergencePlaybook: 1, name: book.name, schedule: book.schedule, yaml: book.yaml }, null, 2);
+			ui.frame = ui.frame + 1;
+		} }, "⇩ export artifact")));
+
+	if (ui.pbExport) {
+		parts.push(el("pre", {}, ui.pbExport));
+	}
+
+	parts.push(el("h3", {}, "flow yaml"));
+	parts.push(el("pre", { class: "yaml scroll" }, book.yaml || "(empty)"));
+
+	return el("div", { class: "panel" }, el("div", {}, parts));
 };
 
 // --- Shell ----------------------------------------------------------------
@@ -1092,15 +1096,11 @@ export const render = (root, data) => {
 			schedule: null, valid: true, yaml: data.yaml, last_run_at: null
 		}] : []);
 
-	// Land on Explorer when there's data to explore, otherwise on Playbooks (the
-	// home) — a fresh served app has no entities until a playbook runs. A refresh
-	// passes __view to stay put.
-	const hasEntities = Object.keys(data.entities || {}).some((type) => {
-		return (data.entities[type] || []).length > 0;
-	});
-
+	// Always land on the Playbooks LIST (the top level). A refresh passes
+	// __view / __openPlaybook to stay put.
 	const ui = state({
-		view: data.__view || (hasEntities ? "explorer" : "playbooks"),
+		view: data.__view || "playbooks",
+		openPlaybook: data.__openPlaybook || null,
 		served: Boolean(data.__served),
 		playbooks: seedPlaybooks,
 		pbSel: data.__pbSel || null,
@@ -1154,9 +1154,10 @@ export const render = (root, data) => {
 			.then((response) => { return response.json(); })
 			.then((fresh) => {
 				fresh.__served = true;
-				// Preserve where the user was (view + selected playbook) across the
-				// re-render, so an action doesn't bounce them to another tab.
+				// Preserve where the user was (view + open playbook) across the
+				// re-render, so an action doesn't bounce them elsewhere.
 				fresh.__view = ui.view;
+				fresh.__openPlaybook = ui.openPlaybook;
 				fresh.__pbSel = ui.pbSel;
 				root.innerHTML = "";
 				render(root, fresh);
@@ -1174,58 +1175,91 @@ export const render = (root, data) => {
 	document.addEventListener("pointerup", () => { ui.drag = null; });
 
 	const views = {
-		explorer: () => explorer(data, ui),
-		builder: () => builder(data, ui),
-		executions: () => executionsView(data, ui),
 		playbooks: () => playbooksView(data, ui),
-		graph: () => graphView(data, ui)
+		overview: () => playbookOverview(data, ui),
+		explorer: () => explorer(data, ui),
+		graph: () => graphView(data, ui),
+		executions: () => executionsView(data, ui),
+		builder: () => builder(data, ui)
 	};
 
-	// Section metadata: title + subtitle shown in the main top bar, and the nav
-	// entry (icon, optional count). Playbooks is its OWN group (the home / manage
-	// layer); the rest are data-browsing views — a Grafana-like split.
 	const SECTIONS = {
-		playbooks: { title: "Playbooks", sub: "saved flows — draft · active · paused", ico: "▤", count: () => ui.playbooks.length },
-		explorer: { title: "Explorer", sub: "entities discovered across your active playbooks", ico: "▦" },
-		graph: { title: "Discovery graph", sub: "entities and how they were found", ico: "◈" },
-		executions: { title: "Executions", sub: "every block run — input, output, timing", ico: "≡", count: () => (data.executions || []).length },
-		builder: { title: "Flow builder", sub: "the active flow as a node graph", ico: "⚙" }
+		playbooks: { title: "Playbooks", sub: "all saved flows", ico: "▤" },
+		overview: { title: "Overview", sub: "this playbook's config + run summary", ico: "◎" },
+		explorer: { title: "Entities", sub: "discovered entities (global store)", ico: "▦" },
+		graph: { title: "Graph", sub: "discovery graph (global store)", ico: "◈" },
+		executions: { title: "Executions", sub: "this playbook's block runs", ico: "≡" },
+		builder: { title: "Flow", sub: "the flow as a node graph", ico: "⚙" }
 	};
 
-	const navItem = (id) => {
-		const meta = SECTIONS[id];
+	// Level transitions rebuild the nav (home <-> playbook page), so they do a
+	// local re-render carrying the live state (playbooks include local imports).
+	ui.rerender = () => {
+		const carry = Object.assign({}, data, {
+			__served: ui.served, __view: ui.view, __openPlaybook: ui.openPlaybook, playbooks: ui.playbooks
+		});
+		root.innerHTML = "";
+		render(root, carry);
+	};
+	ui.openBook = (id) => { ui.openPlaybook = id; ui.view = "overview"; ui.rerender(); };
+	ui.closeBook = () => { ui.openPlaybook = null; ui.view = "playbooks"; ui.rerender(); };
 
+	// A data-view sub-nav item (only meaningful inside an open playbook).
+	const navItem = (id, label) => {
 		return el("button", {
 			class: () => (ui.view === id ? "nav-item active" : "nav-item"),
 			onclick: () => { ui.view = id; }
-		},
-		el("span", { class: "ico" }, meta.ico),
-		el("span", {}, meta.title),
-		meta.count ? el("span", { class: "badge-n" }, () => { ui.frame; return String(meta.count()); }) : el("span", {}));
+		}, el("span", { class: "ico" }, SECTIONS[id].ico), el("span", {}, label));
 	};
 
-	const sidebar = el("aside", { class: "sidebar" },
-		el("div", { class: "brand" }, "convergence"),
-		el("div", { class: "nav-group" },
-			el("div", { class: "nav-label" }, "manage"),
-			navItem("playbooks")),
-		el("div", { class: "nav-group" },
-			el("div", { class: "nav-label" }, "browse data"),
-			navItem("explorer"), navItem("graph"), navItem("executions"), navItem("builder")),
-		el("div", { class: "sidebar-foot" },
-			el("span", { class: "dot " + (ui.served ? "live" : "snap") }),
-			ui.served ? "live · connected" : "static snapshot"));
+	const foot = el("div", { class: "sidebar-foot" },
+		el("span", { class: "dot " + (ui.served ? "live" : "snap") }),
+		ui.served ? "live · connected" : "static snapshot");
+
+	// Two-level rail. HOME: just the Playbooks list. PLAYBOOK PAGE: a back link,
+	// the playbook name, and its data views underneath — a clear hierarchy.
+	let sidebar;
+
+	if (!ui.openPlaybook) {
+		sidebar = el("aside", { class: "sidebar" },
+			el("div", { class: "brand" }, "convergence"),
+			el("div", { class: "nav-group" },
+				el("div", { class: "nav-label" }, "home"),
+				el("button", { class: "nav-item active" },
+					el("span", { class: "ico" }, "▤"), el("span", {}, "Playbooks"),
+					el("span", { class: "badge-n" }, String(ui.playbooks.length)))),
+			foot);
+	} else {
+		const openName = (ui.playbooks.find((b) => { return b.id === ui.openPlaybook; }) || { name: "playbook" }).name;
+
+		sidebar = el("aside", { class: "sidebar" },
+			el("div", { class: "brand" }, "convergence"),
+			el("button", { class: "nav-item", title: "back to all playbooks", onclick: () => { ui.closeBook(); } },
+				el("span", { class: "ico" }, "←"), el("span", {}, "All playbooks")),
+			el("div", { class: "nav-group" },
+				el("div", { class: "nav-label" }, openName),
+				navItem("overview", "Overview"),
+				navItem("explorer", "Entities"),
+				navItem("graph", "Graph"),
+				navItem("executions", "Executions"),
+				navItem("builder", "Flow")),
+			foot);
+	}
 
 	const topbar = el("div", { class: "topbar" }, () => {
+		ui.frame;
 		const meta = SECTIONS[ui.view] || { title: "", sub: "" };
+		const crumb = ui.openPlaybook
+			? ((ui.playbooks.find((b) => { return b.id === ui.openPlaybook; }) || { name: "" }).name + " / " + meta.title)
+			: "Playbooks";
 
 		return el("div", { style: "display:flex;flex-direction:column;gap:2px" },
-			el("div", { class: "section-title" }, meta.title),
+			el("div", { class: "section-title" }, crumb),
 			el("div", { class: "section-sub" }, meta.sub));
 	}, statBar(data, ui));
 
 	const main = el("main", { class: "main" }, topbar,
-		el("div", {}, when(() => ui.view, (view) => views[view]())));
+		el("div", {}, when(() => ui.view, (view) => (views[view] || views.playbooks)())));
 
 	const app = el("div", { class: "shell" }, sidebar, main);
 
