@@ -28,16 +28,27 @@ reorder TLS extensions, so the match is close, not exact.
   Use when a target blocklists by exact JA3 and cipher ordering isn't enough.
   Needs a Go shared lib + FFI bindings — heavier, network-side.
 
-## Verifying our own JA3 (planned harness)
+## Verifying our own JA3 (built)
 
-To test that a profile actually yields the intended JA3 **offline**: connect a
-`tls.connect` client and a `tls.createServer` server over an in-memory socket
-pair, tap the raw ClientHello bytes on the server side before TLS parsing,
-compute JA3 in-process (parse version + ciphers + extensions + curves + formats,
-strip GREASE, MD5), and assert it equals the expected browser JA3. No external
-service. This is the verification harness for `utils/tls-fingerprint` — build it
-as a focused increment (a correct JA3 parser must handle GREASE and field widths
-precisely).
+`utils/ja3` measures our actual outgoing fingerprint **offline**: a loopback TCP
+server taps the raw ClientHello a `tls.connect` client sends, and JA3 is
+computed with [`read-tls-client-hello`](https://www.npmjs.com/package/read-tls-client-hello)
+(no hand-rolled parser, GREASE handled). No external service, no completed
+handshake.
+
+Measured finding (proves the approach): the three profiles produce three
+distinct JA3s, so Node's `ciphers` option genuinely moves the fingerprint —
+
+| profile | JA3 |
+| --- | --- |
+| chrome | `8f52e022887766d648be498c53e0809e` |
+| firefox | `07545dfd0e8a73ef737671af96a04d07` |
+| node | `e29263fb066facf0f3d23ccaf0fe19da` |
+
+These match *our* build of Node; to impersonate a real browser, calibrate
+`utils/tls-fingerprint` profiles against that browser's published JA3 and assert
+equality here. (Exact-match including extension order still needs the
+`tls-client` escalation.)
 
 ## HTTP client layer (planned)
 
@@ -45,3 +56,7 @@ A `services/http` will centralise egress: given a target, pick a consistent
 {UA, TLS profile, egress IP}, apply retries/timeouts, and route through the
 above. Default transport is Node `https` with a shaped `Agent`; the `tls-client`
 sidecar is a pluggable transport for hard targets.
+
+Reference / inspiration for the impersonating client:
+[`ghostfetch`](https://www.npmjs.com/package/ghostfetch) (fetch-style browser
+impersonation) and `tls-client`.
