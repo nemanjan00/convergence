@@ -1,5 +1,6 @@
 const engineFactory = require("../index");
 const store = require("../../services/store");
+const journal = require("../../services/journal");
 
 // A block handler is input => Promise<fields>.
 const constantBlock = (fields) => {
@@ -64,6 +65,37 @@ const register = (engine) => {
 describe("convergence engine", () => {
 	beforeEach(() => {
 		store._reset();
+		journal._reset();
+	});
+
+	it("journals every block execution (observable run: input/output/changed/timing)", () => {
+		const engine = engineFactory.create();
+		register(engine);
+
+		return engine.run(buildFlow()).then(() => {
+			const entries = journal.all();
+
+			expect(entries.length).toBeGreaterThan(0);
+
+			// A successful enrichment is recorded with its produced output and a
+			// changed flag the first time it writes.
+			const resolveOk = entries.find((entry) => {
+				return entry.block === "resolve" && entry.status === "ok" &&
+					entry.entity.key === "name=\"a.example.com\"";
+			});
+
+			expect(resolveOk).toBeDefined();
+			expect(resolveOk.uses).toBe("dns.resolve");
+			expect(resolveOk.changed).toBe(true);
+			expect(resolveOk.output.ip).toBe("1.2.3.4");
+			expect(typeof resolveOk.duration_ms).toBe("number");
+			expect(resolveOk.sweep).toBeGreaterThanOrEqual(1);
+
+			// Guard-blocked attempts are recorded too (status "skipped"), which is
+			// how the panel shows "this block didn't run, and why".
+			const skipped = entries.filter((entry) => { return entry.status === "skipped"; });
+			expect(skipped.length).toBeGreaterThan(0);
+		});
 	});
 
 	it("cascades via entity-state convergence: seed -> resolve -> scan -> title", () => {

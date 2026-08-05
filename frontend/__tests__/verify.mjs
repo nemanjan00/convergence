@@ -42,6 +42,11 @@ const data = {
 	},
 	edges: [
 		{ from: { type: "cert", key: "id=1" }, rel: "has_san", to: { type: "host", key: "name=\"a.example.com\"" }, via: "fanout" }
+	],
+	executions: [
+		{ id: "x1", run: "r", sweep: 1, block: "fanout", uses: "fanout", entity: { type: "cert", key: "id=1" }, status: "ok", changed: true, outputs: 2, input: { certificate: "…" }, output: [{ name: "a.example.com" }], duration_ms: 3 },
+		{ id: "x2", run: "r", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"a.example.com\"" }, status: "ok", changed: true, input: { name: "a.example.com" }, output: { ip: "1.2.3.4" }, duration_ms: 12 },
+		{ id: "x3", run: "r", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"b.example.com\"" }, status: "skipped", changed: false }
 	]
 };
 
@@ -101,7 +106,7 @@ const yamlText = document.querySelector("pre.yaml").textContent;
 
 const failures = [];
 if (rows < 1) { failures.push("no table rows rendered"); }
-if (tabs !== 3) { failures.push("expected 3 tabs, got " + tabs); }
+if (tabs !== 4) { failures.push("expected 4 tabs, got " + tabs); }
 if (!hasHost) { failures.push("host value not in DOM"); }
 if (nodes !== 5) { failures.push("expected 5 canvas nodes, got " + nodes); }
 if (wires !== 4) { failures.push("expected 4 wires (in-place enrichment = 1 wire), got " + wires); }
@@ -117,6 +122,23 @@ graphTab.click();
 
 const graphNodes = document.querySelectorAll(".gnode.ent").length;
 if (graphNodes < 1) { failures.push("graph rendered no entity nodes"); }
+
+// Executions panel: switch to it, confirm the run log rendered a row per
+// execution with status pills, and that selecting one shows its input/output.
+const execTab = Array.from(document.querySelectorAll(".tab"))
+	.find((t) => t.textContent.indexOf("Executions") !== -1);
+execTab.click();
+
+const execRows = document.querySelectorAll("tbody tr").length;
+const pills = document.querySelectorAll(".pill").length;
+if (execRows !== 3) { failures.push("executions: expected 3 rows, got " + execRows); }
+if (pills !== 3) { failures.push("executions: expected 3 status pills, got " + pills); }
+
+document.querySelector("tbody tr.row").click();
+const detailText = document.querySelector(".lineage") ? document.querySelector(".lineage").textContent : "";
+if (detailText.indexOf("input") === -1 || detailText.indexOf("output") === -1) {
+	failures.push("executions: selecting a run did not show input/output");
+}
 
 // Phone orientation: render fresh at a narrow width and confirm the layout
 // flips to vertical (nodes stack down, not across) and still never overlaps.

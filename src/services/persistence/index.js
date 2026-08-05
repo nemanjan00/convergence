@@ -93,6 +93,39 @@ module.exports = (mongoUrl, dbName) => {
 			});
 		},
 
+		// Append this run's execution journal to the durable `executions`
+		// collection (keyed by entry id, so a re-save is idempotent). This is how
+		// logs survive restarts — the panel reads the accumulated history.
+		saveJournal: (journal) => {
+			const entries = journal.all();
+
+			if (entries.length === 0) {
+				return Promise.resolve();
+			}
+
+			return persistence._db().then((db) => {
+				const ops = entries.map((entry) => {
+					return db.collection("executions").updateOne(
+						{ _id: entry.id },
+						{ $set: entry },
+						{ upsert: true }
+					);
+				});
+
+				return Promise.all(ops);
+			});
+		},
+
+		// Load prior executions into the journal before a run, so the panel shows
+		// history across runs (most-recent cap applied by the journal itself).
+		loadJournal: (journal) => {
+			return persistence._db().then((db) => {
+				return db.collection("executions").find({}).toArray().then((docs) => {
+					journal.hydrate(docs);
+				});
+			});
+		},
+
 		close: () => {
 			if (!persistence._client) {
 				return Promise.resolve();

@@ -18,6 +18,7 @@ const uuid = require("uuid").v4;
 const sift = require("sift").default;
 const config = require("../config");
 const store = require("../services/store");
+const journal = require("../services/journal");
 const envelope = require("../utils/envelope");
 
 // Safety backstop: a well-formed flow settles; a misbehaving block that never
@@ -90,7 +91,20 @@ const createEngine = () => {
 			const ctx = {};
 			ctx[block.forEach] = flattenEntity(entity);
 
+			// Base journal fields shared by every outcome for this attempt.
+			const logBase = {
+				run: flow._runId,
+				sweep: flow._sweep,
+				block: block.id,
+				uses: block.uses,
+				for_each: block.forEach,
+				merge_into: block.mergeInto,
+				entity: { type: block.forEach, key: entity._identity }
+			};
+
 			if (!passesWhen(block.when, ctx)) {
+				journal.record(Object.assign({ status: "skipped", changed: false }, logBase));
+
 				return Promise.resolve(false);
 			}
 
@@ -108,6 +122,8 @@ const createEngine = () => {
 				trace: [block.forEach + ":" + entity._identity],
 				input: block.inputs(ctx)
 			});
+
+			const startedAt = Date.now();
 
 			return registered.call(work.input).then((output) => {
 				const collection = flow.entities[block.mergeInto];
@@ -155,13 +171,35 @@ const createEngine = () => {
 					seen[seenKey] = merged._version;
 				});
 
+				journal.record(Object.assign({
+					status: "ok",
+					changed: changed,
+					input: work.input,
+					output: output,
+					outputs: batches.length,
+					duration_ms: Date.now() - startedAt
+				}, logBase));
+
 				return changed;
+			}).catch((error) => {
+				// Handlers are meant to be tolerant, but if one throws we log the
+				// failure (observable in the Executions panel) and rethrow so the
+				// engine's own error handling is unchanged.
+				journal.record(Object.assign({
+					status: "error",
+					changed: false,
+					input: work.input,
+					error: error && error.message ? error.message : String(error),
+					duration_ms: Date.now() - startedAt
+				}, logBase));
+
+				throw error;
 			});
 		},
 
 		// Run the whole flow to a fixpoint over its (bounded) source.
 		run: (flow) => {
-			const preparedFlow = Object.assign({}, flow, { _runId: uuid() });
+			const preparedFlow = Object.assign({}, flow, { _runId: uuid(), _sweep: 0 });
 
 			Object.keys(flow.entities).forEach((type) => {
 				store.define(type, flow.entities[type]);
@@ -195,6 +233,8 @@ const createEngine = () => {
 			// store changed during the sweep.
 			const sweep = (processed, seen) => {
 				let changed = false;
+
+				preparedFlow._sweep = preparedFlow._sweep + 1;
 
 				// Sequential chain so fixpoint accounting is deterministic;
 				// per-block concurrency/rate still comes from queue-promised.

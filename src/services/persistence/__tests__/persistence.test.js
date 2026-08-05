@@ -1,6 +1,7 @@
 const MongoMemoryServer = require("mongodb-memory-server").MongoMemoryServer;
 const persistenceFactory = require("../index");
 const store = require("../../store");
+const journal = require("../../journal");
 
 // Real Mongo persistence, verified against an ephemeral mongod (no external
 // server needed). Booting mongod is slow, so allow generous time.
@@ -70,6 +71,28 @@ describe("persistence (mongo)", () => {
 			expect(map["name=\"a.com\""].fields.ip.value).toBe("1.2.3.4");
 			expect(map["name=\"a.com\""].fields.title.value).toBe("hi");
 			expect(map["name=\"b.com\""].fields.ip.value).toBe("9.9.9.9");
+		});
+	});
+
+	it("persists the execution journal across runs (logs survive restart)", () => {
+		journal._reset();
+		journal.record({ id: "e1", block: "resolve", uses: "dns.a", status: "ok", changed: true, sweep: 1 });
+		journal.record({ id: "e2", block: "scan", uses: "port.scan", status: "skipped", changed: false, sweep: 1 });
+
+		return persistence.saveJournal(journal).then(() => {
+			journal._reset(); // simulate a new process
+			return persistence.loadJournal(journal);
+		}).then(() => {
+			const entries = journal.all();
+
+			expect(entries).toHaveLength(2);
+
+			const byId = {};
+			entries.forEach((entry) => { byId[entry.id] = entry; });
+
+			expect(byId.e1.uses).toBe("dns.a");
+			expect(byId.e1.changed).toBe(true);
+			expect(byId.e2.status).toBe("skipped");
 		});
 	});
 });

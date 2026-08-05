@@ -616,6 +616,177 @@ const graphView = (data, ui) => {
 		chips, canvas, detail);
 };
 
+// --- Executions (n8n-style run log) ---------------------------------------
+
+const STATUSES = ["all", "ok", "changed", "skipped", "error", "failed"];
+
+// The LATEST execution per (block, entity) — a target's current state, so
+// "failed" means still-failing, not failed-then-recovered.
+const latestByTarget = (entries) => {
+	const latest = {};
+
+	entries.forEach((entry) => {
+		const key = entry.block + "|" + (entry.entity ? entry.entity.type + "|" + entry.entity.key : "-");
+		latest[key] = entry;
+	});
+
+	return Object.keys(latest).map((key) => { return latest[key]; });
+};
+
+// The retry queue: targets whose final state is an error.
+const failedEntries = (entries) => {
+	return latestByTarget(entries).filter((entry) => { return entry.status === "error"; });
+};
+
+// Does an execution entry pass the current status filter chip? ("failed" is
+// handled separately since it needs the whole set to find the latest.)
+const matchesStatus = (entry, filter) => {
+	if (filter === "all") { return true; }
+	if (filter === "changed") { return entry.status === "ok" && entry.changed; }
+
+	return entry.status === filter;
+};
+
+const executionsView = (data, ui) => {
+	const all = data.executions || [];
+
+	const failed = failedEntries(all);
+
+	const counts = {
+		all: all.length,
+		ok: all.filter((e) => e.status === "ok").length,
+		changed: all.filter((e) => e.status === "ok" && e.changed).length,
+		skipped: all.filter((e) => e.status === "skipped").length,
+		error: all.filter((e) => e.status === "error").length,
+		failed: failed.length
+	};
+
+	const chips = el("div", { class: "chips" }, STATUSES.map((status) => {
+		return el("button", {
+			class: () => (ui.exStatus === status ? "chip active" : "chip"),
+			onclick: () => { ui.exStatus = status; ui.exSel = null; }
+		}, status + " (" + counts[status] + ")");
+	}));
+
+	// "failed" is the deduped latest-per-target error set (the retry queue);
+	// every other chip filters the raw execution stream.
+	const rows = () => {
+		const withIndex = all.map((entry, index) => { return Object.assign({ _i: index }, entry); });
+
+		if (ui.exStatus === "failed") {
+			const failedIds = new Set(failed.map((entry) => { return entry.id; }));
+
+			return withIndex.filter((entry) => { return failedIds.has(entry.id); }).reverse();
+		}
+
+		return withIndex.filter((entry) => { return matchesStatus(entry, ui.exStatus); }).reverse();
+	};
+
+	// Retry affordance for the whole failed set (honoured by the served backend).
+	const retryBar = () => {
+		if (failed.length === 0) {
+			return el("span", {});
+		}
+
+		return el("button", {
+			class: "rerun",
+			title: "re-run every target whose final state is an error",
+			onclick: () => { ui.exStatus = "failed"; ui.exRerunAll = true; }
+		}, "⟳ re-run all failed (" + failed.length + ")");
+	};
+
+	const statusPill = (entry) => {
+		const kind = (entry.status === "ok" && entry.changed) ? "changed" : entry.status;
+
+		return el("span", { class: "pill pill-" + kind }, kind);
+	};
+
+	const table = el("div", { class: "scroll" },
+		el("table", {},
+			el("thead", {}, el("tr", {},
+				el("th", {}, "block"),
+				el("th", {}, "uses"),
+				el("th", {}, "entity"),
+				el("th", {}, "status"),
+				el("th", {}, "sweep"),
+				el("th", {}, "ms"))),
+			el("tbody", {}, list(
+				rows,
+				(entry) => entry.id || String(entry._i),
+				(entry) => {
+					return el("tr", {
+						class: () => (ui.exSel === entry._i ? "row sel" : "row"),
+						onclick: () => { ui.exSel = entry._i; }
+					},
+					el("td", { class: "key", "data-label": "block" }, entry.block),
+					el("td", { "data-label": "uses" }, el("div", { class: "val" }, entry.uses || "—")),
+					el("td", { "data-label": "entity" }, el("div", { class: "val" }, entry.entity ? entry.entity.key : "—")),
+					el("td", { "data-label": "status" }, statusPill(entry)),
+					el("td", { "data-label": "sweep" }, el("div", { class: "val" }, String(entry.sweep || "—"))),
+					el("td", { "data-label": "ms" }, el("div", { class: "val" }, entry.duration_ms === undefined ? "—" : String(entry.duration_ms))));
+				}
+			))
+		)
+	);
+
+	// Detail pane: the selected execution's input + output (the n8n "click a
+	// node run to see its data" view) + a re-run affordance.
+	const detail = el("div", { class: "lineage" }, () => {
+		if (ui.exSel === null || ui.exSel === undefined) {
+			return el("p", { class: "muted" }, "select an execution to see its input / output");
+		}
+
+		const entry = all[ui.exSel];
+
+		if (!entry) {
+			return el("p", { class: "muted" }, "gone");
+		}
+
+		const blocks = [];
+
+		blocks.push(el("div", { class: "hint" },
+			entry.block + " · " + (entry.uses || "") + " · " +
+			(entry.entity ? entry.entity.type + " " + entry.entity.key : "")));
+
+		// Re-run is a control the served app will honour (replay this block on
+		// this entity). Disabled visual until the live backend is wired.
+		blocks.push(el("button", {
+			class: "rerun",
+			title: "replay this block against this entity (needs the live backend)",
+			onclick: () => { ui.exRerun = entry.id; }
+		}, "⟳ re-run"));
+
+		if (ui.exRerun === entry.id) {
+			blocks.push(el("p", { class: "muted" }, "re-run queued — wired when the served backend lands"));
+		}
+
+		if (entry.error) {
+			blocks.push(el("h3", {}, "error"));
+			blocks.push(el("pre", { class: "err-pre" }, entry.error));
+		}
+
+		blocks.push(el("h3", {}, "input"));
+		blocks.push(el("pre", {}, JSON.stringify(entry.input || {}, null, 2)));
+		blocks.push(el("h3", {}, "output"));
+		blocks.push(el("pre", {}, JSON.stringify(entry.output === undefined ? {} : entry.output, null, 2)));
+
+		return el("div", {}, blocks);
+	});
+
+	const banner = () => {
+		if (!ui.exRerunAll || failed.length === 0) {
+			return el("span", {});
+		}
+
+		return el("p", { class: "muted" },
+			"queued re-run of " + failed.length + " failed target(s) — executed when the served backend lands");
+	};
+
+	return el("div", { class: "panel" },
+		el("div", { class: "hint" }, "every block execution this run — input, output, whether it changed the entity, and timing"),
+		chips, retryBar(), banner(), table, el("h3", {}, "detail"), detail);
+};
+
 // --- Shell ----------------------------------------------------------------
 
 export const render = (root, data) => {
@@ -644,6 +815,10 @@ export const render = (root, data) => {
 		graphTypes: graphTypes,
 		gsel: null,
 		narrow: narrow,
+		exStatus: "all",
+		exSel: null,
+		exRerun: null,
+		exRerunAll: false,
 		frame: 0,
 		drag: null
 	});
@@ -685,12 +860,17 @@ export const render = (root, data) => {
 		el("button", {
 			class: () => (ui.view === "graph" ? "tab active" : "tab"),
 			onclick: () => { ui.view = "graph"; }
-		}, "Graph")
+		}, "Graph"),
+		el("button", {
+			class: () => (ui.view === "executions" ? "tab active" : "tab"),
+			onclick: () => { ui.view = "executions"; }
+		}, "Executions (" + ((data.executions || []).length) + ")")
 	);
 
 	const views = {
 		explorer: () => explorer(data, ui),
 		builder: () => builder(data, ui),
+		executions: () => executionsView(data, ui),
 		graph: () => graphView(data, ui)
 	};
 

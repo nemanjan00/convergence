@@ -11,6 +11,7 @@ const engineFactory = require("../src/engine");
 const blocks = require("../src/blocks");
 const sources = require("../src/sources");
 const store = require("../src/services/store");
+const journal = require("../src/services/journal");
 
 const flowPath = process.argv[2] ||
 	path.join(__dirname, "../examples/flows/ct-recon.yaml");
@@ -55,7 +56,8 @@ engine.run(flow)
 			yaml: yamlString,
 			spec: loader.parse(yamlString),
 			entities: entities,
-			edges: store.edges()
+			edges: store.edges(),
+			executions: journal.all()
 		}, null, 2) + "\n");
 
 		process.exit(0);

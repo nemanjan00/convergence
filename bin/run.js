@@ -11,6 +11,7 @@ const engineFactory = require("../src/engine");
 const blocks = require("../src/blocks");
 const sources = require("../src/sources");
 const store = require("../src/services/store");
+const journal = require("../src/services/journal");
 const config = require("../src/config");
 const persistenceFactory = require("../src/services/persistence");
 
@@ -41,7 +42,9 @@ console.log("Blocks: " + flow.blocks.map((b) => b.id).join(", "));
 console.log("Persistence: " + (persistence ? mongoUrl : "off (in-memory)") + "\n");
 console.log("converging (live)…\n");
 
-const hydrate = persistence ? persistence.load(store, flow.entities) : Promise.resolve();
+const hydrate = persistence
+	? persistence.load(store, flow.entities).then(() => { return persistence.loadJournal(journal); })
+	: Promise.resolve();
 
 hydrate
 	.then(() => {
@@ -49,6 +52,9 @@ hydrate
 	})
 	.then(() => {
 		return persistence ? persistence.save(store, Object.keys(flow.entities)) : null;
+	})
+	.then(() => {
+		return persistence ? persistence.saveJournal(journal) : null;
 	})
 	.then(() => {
 		return persistence ? persistence.close() : null;
