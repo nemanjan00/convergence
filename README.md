@@ -26,10 +26,14 @@
 > Nothing here needs an API key. See [Status](#status) for the real-vs-pending
 > breakdown.
 
-The name is the execution model: enrichment blocks re-evaluate against each
-entity's current **state** and re-run until nothing changes — so a fact ("port
-50 open", "resolved to this IP") triggers its reactions no matter which of a
-hundred paths discovered it.
+The name converges on two things at once. **Mechanically**, enrichment blocks
+re-evaluate against each entity's current **state** and re-run until nothing
+changes — a fixpoint — so a fact ("port 50 open", "resolved to this IP")
+triggers its reactions no matter which of a hundred paths discovered it.
+**For the operator**, that same loop converges you toward *knowing everything
+knowable* about the target: it keeps pulling threads until the picture stops
+growing. Fixpoint reached = both "everything runnable has run" and "there's
+nothing left to learn from here."
 
 ```mermaid
 flowchart TB
