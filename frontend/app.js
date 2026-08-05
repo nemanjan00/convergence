@@ -205,8 +205,56 @@ const cell = (field, label) => {
 	);
 };
 
+// A friendly empty state with an optional call-to-action button.
+const emptyState = (icon, title, sub, action) => {
+	const kids = [
+		el("div", { class: "empty-icon" }, icon),
+		el("div", { class: "empty-title" }, title),
+		el("div", { class: "empty-sub" }, sub)
+	];
+
+	if (action) {
+		kids.push(el("button", { class: "btn btn-accent", onclick: action.onClick }, action.label));
+	}
+
+	return el("div", { class: "empty" }, kids);
+};
+
+// The at-a-glance summary bar under the header: what the app currently knows.
+const statBar = (data, ui) => {
+	const entityCount = Object.keys(data.entities || {}).reduce((sum, type) => {
+		return sum + (data.entities[type] || []).length;
+	}, 0);
+	const typeCount = Object.keys(data.entities || {}).filter((type) => {
+		return (data.entities[type] || []).length > 0;
+	}).length;
+	const active = ui.playbooks.filter((book) => { return book.state === "active"; }).length;
+
+	const stat = (value, label, cls) => {
+		return el("div", { class: "stat" },
+			el("div", { class: "stat-val" }, el("span", { class: cls || "" }, String(value))),
+			el("div", { class: "stat-label" }, label));
+	};
+
+	return el("div", { class: "statbar" },
+		stat(entityCount, "entities", "good"),
+		stat(typeCount, "types"),
+		stat((data.edges || []).length, "edges"),
+		stat((data.executions || []).length, "executions"),
+		stat(ui.playbooks.length, "playbooks"),
+		stat(active, "active", "accent"));
+};
+
 const explorer = (data, ui) => {
 	const types = Object.keys(data.entities);
+
+	// Nothing discovered yet — point the user at the Playbooks home.
+	if (types.length === 0 || types.every((type) => { return data.entities[type].length === 0; })) {
+		return el("div", { class: "panel" }, emptyState(
+			"🔍", "No entities yet",
+			"Entities show up here once a playbook runs. Head to Playbooks, activate one (or import a sample), and hit Run.",
+			{ label: "Go to Playbooks", onClick: () => { ui.view = "playbooks"; } }));
+	}
 
 	const typeTabs = el("div", { class: "chips" }, types.map((type) => {
 		return el("button", {
@@ -220,6 +268,13 @@ const explorer = (data, ui) => {
 		type: "search",
 		placeholder: "filter rows…",
 		oninput: (e) => { ui.query = e.target.value; }
+	});
+
+	const count = el("div", { class: "count" }, () => {
+		const total = (data.entities[ui.type] || []).length;
+		const shown = (data.entities[ui.type] || []).filter((row) => { return matchesQuery(row, ui.query); }).length;
+
+		return shown === total ? (total + " " + ui.type) : (shown + " of " + total + " " + ui.type);
 	});
 
 	const tableWrap = el("div", { class: "scroll" },
@@ -272,7 +327,7 @@ const explorer = (data, ui) => {
 		}));
 	});
 
-	return el("div", { class: "panel" }, typeTabs, search, tableWrap,
+	return el("div", { class: "panel" }, typeTabs, search, count, tableWrap,
 		el("h3", {}, "lineage"), lineage);
 };
 
@@ -527,6 +582,13 @@ const graphModel = (data, included) => {
 const graphView = (data, ui) => {
 	const allTypes = Object.keys(data.entities);
 
+	if (allTypes.length === 0 || allTypes.every((type) => { return data.entities[type].length === 0; })) {
+		return el("div", { class: "panel" }, emptyState(
+			"🕸️", "The discovery graph is empty",
+			"The graph draws itself as entities and their lineage edges appear. Run a playbook first.",
+			{ label: "Go to Playbooks", onClick: () => { ui.view = "playbooks"; } }));
+	}
+
 	const chips = el("div", { class: "chips" }, allTypes.map((type) => {
 		return el("button", {
 			class: () => (ui.graphTypes[type] ? "chip active" : "chip"),
@@ -649,6 +711,13 @@ const matchesStatus = (entry, filter) => {
 
 const executionsView = (data, ui) => {
 	const all = data.executions || [];
+
+	if (all.length === 0) {
+		return el("div", { class: "panel" }, emptyState(
+			"📋", "No executions yet",
+			"Every block run is logged here — input, output, whether it changed the entity, and timing. Run a playbook to populate it.",
+			{ label: "Go to Playbooks", onClick: () => { ui.view = "playbooks"; } }));
+	}
 
 	const failed = failedEntries(all);
 
@@ -834,39 +903,41 @@ const playbooksView = (data, ui) => {
 		ui.api("POST", "/api/playbooks/" + book.id + "/run").then(ui.refresh);
 	};
 
-	const table = el("div", { class: "scroll" },
-		el("table", {},
-			el("thead", {}, el("tr", {},
-				el("th", {}, "name"), el("th", {}, "state"),
-				el("th", {}, "schedule"), el("th", {}, "valid"), el("th", {}, "last run"),
-				el("th", {}, ""))),
-			el("tbody", {}, () => {
-				ui.frame;
+	const exportBook = (book) => {
+		ui.pbSel = book.id;
+		ui.pbExport = JSON.stringify(
+			{ convergencePlaybook: 1, name: book.name, schedule: book.schedule, yaml: book.yaml }, null, 2);
+		ui.frame = ui.frame + 1;
+	};
 
-				return el("g", {}, ui.playbooks.map((book) => {
-					return el("tr", {
-						class: () => (ui.pbSel === book.id ? "row sel" : "row"),
-						onclick: () => { ui.pbSel = book.id; ui.pbExport = null; }
-					},
-					el("td", { class: "key", "data-label": "name" }, book.name),
-					el("td", { "data-label": "state" }, el("button", {
-						class: "pill pill-pb-" + book.state,
-						title: "click to cycle draft → active → paused",
-						onclick: (e) => { e.stopPropagation(); cycle(book); }
-					}, book.state)),
-					el("td", { "data-label": "schedule" }, el("div", { class: "val" }, book.schedule || "—")),
-					el("td", { "data-label": "valid" }, el("div", { class: "val" }, book.valid === false ? "✗" : "✓")),
-					el("td", { "data-label": "last run" }, el("div", { class: "val" }, book.last_run_at || "—")),
-					el("td", { "data-label": "" }, ui.served
-						? el("button", {
-							class: "rerun", title: "run this playbook now",
-							onclick: (e) => { e.stopPropagation(); runNow(book); }
-						}, "▶ run")
-						: el("span", { class: "muted" }, "—")));
-				}));
-			})
-		)
-	);
+	const cards = el("div", { class: "pbgrid" }, () => {
+		ui.frame;
+
+		return el("g", {}, ui.playbooks.map((book) => {
+			return el("div", {
+				class: () => "pbcard" + (ui.pbSel === book.id ? " sel" : ""),
+				onclick: () => { ui.pbSel = book.id; ui.pbExport = null; ui.frame = ui.frame + 1; }
+			},
+			el("div", { class: "top" },
+				el("div", { class: "nm" }, book.name),
+				el("button", {
+					class: "pill pill-pb-" + book.state,
+					title: "click to cycle draft → active → paused",
+					onclick: (e) => { e.stopPropagation(); cycle(book); }
+				}, book.state)),
+			el("div", { class: "meta" },
+				el("span", {}, book.valid === false ? "✗ invalid" : "✓ valid"),
+				el("span", {}, book.schedule || "no schedule"),
+				el("span", {}, book.last_run_at ? ("ran " + String(book.last_run_at).slice(0, 10)) : "never run")),
+			el("div", { class: "actions" },
+				ui.served
+					? el("button", { class: "btn btn-accent", title: "run now",
+						onclick: (e) => { e.stopPropagation(); runNow(book); } }, "▶ run")
+					: el("span", {}),
+				el("button", { class: "btn btn-ghost", title: "export portable artifact",
+					onclick: (e) => { e.stopPropagation(); exportBook(book); } }, "⇩ export")));
+		}));
+	});
 
 	const detail = el("div", { class: "lineage" }, () => {
 		ui.frame;
@@ -953,15 +1024,26 @@ const playbooksView = (data, ui) => {
 		}, "＋ " + sample.name);
 	}));
 
-	return el("div", { class: "panel" },
-		el("div", { class: "hint" }, "saved flows with a lifecycle — click a state to cycle draft → active → paused; export/import as portable artifacts"),
-		table,
-		el("h3", {}, "sample playbooks"),
+	const startHere = el("div", {},
+		el("h3", {}, "start from a sample"),
 		(data.samples && data.samples.length > 0)
 			? samplesEl
 			: el("p", { class: "muted" }, "no samples bundled"),
-		el("h3", {}, "import"),
-		el("div", { class: "editor" }, importBox, importBtn),
+		el("h3", {}, "or import a flow"),
+		el("div", { class: "editor" }, importBox, importBtn));
+
+	// No playbooks at all -> a welcoming empty state, samples front and centre.
+	if (ui.playbooks.length === 0) {
+		return el("div", { class: "panel" },
+			emptyState("📚", "No playbooks yet",
+				"A playbook is a saved flow with a draft → active → paused lifecycle. Start from a sample below, or paste one to import."),
+			startHere);
+	}
+
+	return el("div", { class: "panel" },
+		el("div", { class: "hint" }, "your saved flows — " + (ui.served ? "▶ run one" : "click a state to cycle") + " draft → active → paused; the data lands in Explorer · Graph · Executions"),
+		cards,
+		startHere,
 		el("h3", {}, "detail"), detail);
 };
 
@@ -1109,7 +1191,8 @@ export const render = (root, data) => {
 	const app = el("div", { class: "app" },
 		el("header", {},
 			el("h1", {}, "convergence"),
-			el("span", { class: "flow" }, data.flow)),
+			el("span", { class: "sub" }, ui.served ? "live" : "snapshot")),
+		statBar(data, ui),
 		tabs,
 		body);
 

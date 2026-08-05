@@ -149,20 +149,20 @@ const pbTab = Array.from(document.querySelectorAll(".tab"))
 	.find((t) => t.textContent.indexOf("Playbooks") !== -1);
 pbTab.click();
 
-const pbRows = document.querySelectorAll("tbody tr.row").length;
+const pbCards = document.querySelectorAll(".pbcard").length;
 const statePill = document.querySelector("[class*='pill-pb-']");
-if (pbRows < 1) { failures.push("playbooks: no rows rendered"); }
+if (pbCards < 1) { failures.push("playbooks: no playbook cards rendered"); }
 if (!statePill) { failures.push("playbooks: no lifecycle pill rendered"); }
 
-// A sample-import chip should render and, when clicked, add a playbook row.
+// A sample-import chip should render and, when clicked, add a playbook card.
 const sampleChip = Array.from(document.querySelectorAll(".chip")).find((c) => c.textContent.indexOf("ct-recon") !== -1);
 if (!sampleChip) {
 	failures.push("playbooks: no sample-import chip rendered");
 } else {
-	const before = document.querySelectorAll("tbody tr.row").length;
+	const before = document.querySelectorAll(".pbcard").length;
 	sampleChip.dispatchEvent(new window.Event("click", { bubbles: true }));
-	if (document.querySelectorAll("tbody tr.row").length !== before + 1) {
-		failures.push("playbooks: importing a sample did not add a row");
+	if (document.querySelectorAll(".pbcard").length !== before + 1) {
+		failures.push("playbooks: importing a sample did not add a card");
 	}
 }
 if (statePill) {
