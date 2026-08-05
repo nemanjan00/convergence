@@ -24,3 +24,6 @@ jobs:
       - run: yarn lint
 
       - run: yarn test
+
+      # Headless render check for the qrp frontend (happy-dom, no browser).
+      - run: yarn frontend:verify

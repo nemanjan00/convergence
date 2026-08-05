@@ -37,6 +37,31 @@ module.exports = [
 		}
 	},
 	{
+		// Frontend is ESM and runs in the browser (qrp); the .mjs verifier runs
+		// under Node + happy-dom.
+		files: ["frontend/**/*.js", "frontend/**/*.mjs"],
+		languageOptions: {
+			ecmaVersion: 2022,
+			sourceType: "module",
+			parser: babelParser,
+			parserOptions: { requireConfigFile: false },
+			globals: {
+				window: "readonly",
+				document: "readonly",
+				console: "readonly",
+				process: "readonly"
+			}
+		},
+		rules: {
+			indent: ["error", "tab"],
+			quotes: ["error", "double"],
+			semi: ["error", "always"],
+			"no-param-reassign": "error",
+			"no-trailing-spaces": "error",
+			"no-unused-vars": ["error", { argsIgnorePattern: "^_" }]
+		}
+	},
+	{
 		// Root config files run in Node/CommonJS too.
 		files: ["*.config.js", "babel.config.js"],
 		languageOptions: {

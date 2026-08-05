@@ -9,6 +9,9 @@
 		"watch": "nodemon src",
 		"flow": "node bin/run.js",
 		"flow-watch": "nodemon bin/run.js",
+		"export": "node bin/export.js",
+		"frontend:verify": "node frontend/__tests__/verify.mjs",
+		"frontend:build": "node bin/build-frontend.js",
 		"lint": "eslint src/ bin/",
 		"test": "jest",
 		"test:watch": "jest --watch",
@@ -17,6 +20,7 @@
 	"jest": {
 		"testEnvironment": "node",
 		"forceExit": true,
+		"roots": ["src"],
 		"transformIgnorePatterns": [
 			"/node_modules/(?!(uuid|sift)/)"
 		]
@@ -46,6 +50,8 @@
 		"@babel/eslint-parser": "^8.0.1",
 		"@babel/preset-env": "^8.0.2",
 		"@eslint/js": "^10.0.1",
+		"@happy-dom/global-registrator": "^20.11.1",
+		"@nemanjan00/qrp": "^0.9.1",
 		"babel-jest": "^30.4.1",
 		"eslint": "^10.8.0",
 		"husky": "^9.1.7",
