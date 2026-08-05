@@ -892,9 +892,27 @@ const playbooksView = (data, ui) => {
 		ui.frame = ui.frame + 1;
 	} }, "⇧ import as draft");
 
+	// Sample gallery: one-click import of the bundled example flows.
+	const samplesEl = el("div", { class: "chips" }, (data.samples || []).map((sample) => {
+		return el("button", {
+			class: "chip", title: sample.description || sample.name,
+			onclick: () => {
+				ui.playbooks.push({
+					id: "pb-" + (ui.playbooks.length + 1), name: sample.name, state: "draft",
+					schedule: null, valid: true, yaml: sample.yaml, last_run_at: null
+				});
+				ui.frame = ui.frame + 1;
+			}
+		}, "＋ " + sample.name);
+	}));
+
 	return el("div", { class: "panel" },
-		el("div", { class: "hint" }, "saved flows with a lifecycle — click a state to cycle draft → active → paused; export/import as portable artifacts (wired to the served backend when it lands)"),
+		el("div", { class: "hint" }, "saved flows with a lifecycle — click a state to cycle draft → active → paused; export/import as portable artifacts"),
 		table,
+		el("h3", {}, "sample playbooks"),
+		(data.samples && data.samples.length > 0)
+			? samplesEl
+			: el("p", { class: "muted" }, "no samples bundled"),
 		el("h3", {}, "import"),
 		el("div", { class: "editor" }, importBox, importBtn),
 		el("h3", {}, "detail"), detail);

@@ -16,6 +16,7 @@ const journal = require("../services/journal");
 const store = require("../services/store");
 const loader = require("../loader");
 const sources = require("../sources");
+const samples = require("../samples");
 
 // Flatten an entity to the { type, key, version, fields:{name:{value,block,at}} }
 // shape the frontend renders (same as bin/export.js).
@@ -61,7 +62,8 @@ const snapshot = () => {
 		entities: entities,
 		edges: store.edges(),
 		executions: journal.all(),
-		playbooks: playbooks.all()
+		playbooks: playbooks.all(),
+		samples: samples.all()
 	};
 };
 
@@ -86,6 +88,8 @@ const createApp = () => {
 	app.get("/api/blocks", (req, res) => { res.json(mcp.listBlocks()); });
 
 	app.get("/api/snapshot", (req, res) => { res.json(snapshot()); });
+
+	app.get("/api/samples", (req, res) => { res.json({ samples: samples.all() }); });
 
 	app.post("/api/flows/validate", (req, res) => {
 		res.json(mcp.validateFlow(req.body && req.body.yaml));
@@ -188,7 +192,21 @@ const createApp = () => {
 		});
 	});
 
+	// Unknown /api/* path -> JSON 404 (never fall through to static HTML).
+	app.use("/api", (req, res) => {
+		res.status(404).json({ error: "not found: " + req.method + " " + req.originalUrl });
+	});
+
 	app.use(express.static(dist));
+
+	// JSON error handler — bad body / thrown route errors come back as JSON, not
+	// an HTML stack page. (4-arg signature marks it as express error middleware.)
+	// eslint-disable-next-line no-unused-vars
+	app.use((error, req, res, next) => {
+		const status = error.status || error.statusCode || 400;
+
+		res.status(status).json({ error: error.message || "error" });
+	});
 
 	return app;
 };

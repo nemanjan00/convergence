@@ -47,6 +47,9 @@ const data = {
 		{ id: "x1", run: "r", sweep: 1, block: "fanout", uses: "fanout", entity: { type: "cert", key: "id=1" }, status: "ok", changed: true, outputs: 2, input: { certificate: "…" }, output: [{ name: "a.example.com" }], duration_ms: 3 },
 		{ id: "x2", run: "r", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"a.example.com\"" }, status: "ok", changed: true, input: { name: "a.example.com" }, output: { ip: "1.2.3.4" }, duration_ms: 12 },
 		{ id: "x3", run: "r", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"b.example.com\"" }, status: "skipped", changed: false }
+	],
+	samples: [
+		{ name: "ct-recon", description: "CT recon sample", yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" }
 	]
 };
 
@@ -150,6 +153,18 @@ const pbRows = document.querySelectorAll("tbody tr.row").length;
 const statePill = document.querySelector("[class*='pill-pb-']");
 if (pbRows < 1) { failures.push("playbooks: no rows rendered"); }
 if (!statePill) { failures.push("playbooks: no lifecycle pill rendered"); }
+
+// A sample-import chip should render and, when clicked, add a playbook row.
+const sampleChip = Array.from(document.querySelectorAll(".chip")).find((c) => c.textContent.indexOf("ct-recon") !== -1);
+if (!sampleChip) {
+	failures.push("playbooks: no sample-import chip rendered");
+} else {
+	const before = document.querySelectorAll("tbody tr.row").length;
+	sampleChip.dispatchEvent(new window.Event("click", { bubbles: true }));
+	if (document.querySelectorAll("tbody tr.row").length !== before + 1) {
+		failures.push("playbooks: importing a sample did not add a row");
+	}
+}
 if (statePill) {
 	const before = statePill.getAttribute("class");
 	statePill.dispatchEvent(new window.Event("click", { bubbles: true }));

@@ -77,11 +77,34 @@ describe("HTTP API", () => {
 			});
 	});
 
+	it("unknown /api path -> JSON 404 (never HTML)", () => {
+		return request(app).get("/api/nope").expect(404).then((res) => {
+			expect(res.body.error).toMatch(/not found/);
+		});
+	});
+
+	it("malformed JSON body -> JSON 400 (not an HTML stack page)", () => {
+		return request(app).post("/api/playbooks")
+			.set("content-type", "application/json").send("{bad json")
+			.expect(400).then((res) => {
+				expect(res.body).toHaveProperty("error");
+			});
+	});
+
 	it("GET /api/snapshot returns a render payload", () => {
 		return request(app).get("/api/snapshot").expect(200).then((res) => {
 			expect(res.body).toHaveProperty("entities");
 			expect(res.body).toHaveProperty("executions");
 			expect(res.body).toHaveProperty("playbooks");
+			expect(res.body).toHaveProperty("samples");
+		});
+	});
+
+	it("GET /api/samples lists the bundled example flows as importable artifacts", () => {
+		return request(app).get("/api/samples").expect(200).then((res) => {
+			expect(res.body.samples.length).toBeGreaterThan(0);
+			expect(res.body.samples[0]).toHaveProperty("name");
+			expect(res.body.samples[0]).toHaveProperty("yaml");
 		});
 	});
 });

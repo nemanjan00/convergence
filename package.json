@@ -1,9 +1,12 @@
 {
 	"name": "convergence",
-	"version": "0.0.1",
+	"version": "0.1.0",
 	"description": "Convergence: an AI composes a declarative recon dataflow; a deterministic engine runs it to a fixpoint.",
 	"license": "UNLICENSED",
 	"private": true,
+	"engines": {
+		"node": ">=20"
+	},
 	"scripts": {
 		"web": "forever src",
 		"watch": "nodemon src",

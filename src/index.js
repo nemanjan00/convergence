@@ -72,7 +72,7 @@ const hydrate = persistence
 hydrate.then(() => {
 	const app = createApp();
 
-	app.listen(PORT, () => {
+	const server = app.listen(PORT, () => {
 		console.log("convergence API + UI on http://localhost:" + PORT);
 		console.log("persistence: " + (persistence ? mongoUrl : "off (in-memory only)"));
 		console.log("scheduler: active playbooks on '" + schedule + "'");
@@ -81,6 +81,18 @@ hydrate.then(() => {
 	if (cron.validate(schedule)) {
 		cron.schedule(schedule, tick);
 	}
+
+	// Graceful shutdown (docker stop / Ctrl-C): stop accepting connections and
+	// close the Mongo client so nothing dangles.
+	const shutdown = () => {
+		console.log("\nshutting down…");
+		server.close(() => {
+			(persistence ? persistence.close() : Promise.resolve()).then(() => { process.exit(0); });
+		});
+	};
+
+	process.on("SIGTERM", shutdown);
+	process.on("SIGINT", shutdown);
 }).catch((error) => {
 	console.error("failed to start:", error);
 	process.exit(1);
