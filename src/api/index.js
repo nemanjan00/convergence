@@ -202,9 +202,14 @@ const createApp = () => {
 	// --- static frontend (the esbuild bundle) ---
 	const dist = path.join(__dirname, "../../frontend/dist");
 
+	// The UI bundle is rebuilt on every deploy — never let a browser serve a
+	// stale copy (the #1 "I rebuilt but still see the old UI").
+	const noStore = (res) => { res.set("cache-control", "no-store"); };
+
 	// `/` serves the LIVE page (no baked data; the bundle fetches /api/snapshot).
 	// Falls back to a clear message if the frontend hasn't been built yet.
 	app.get("/", (req, res) => {
+		noStore(res);
 		res.sendFile(path.join(dist, "live.html"), (error) => {
 			if (error) {
 				res.status(200).type("html").send(
@@ -219,7 +224,7 @@ const createApp = () => {
 		res.status(404).json({ error: "not found: " + req.method + " " + req.originalUrl });
 	});
 
-	app.use(express.static(dist));
+	app.use(express.static(dist, { etag: false, lastModified: false, setHeaders: noStore }));
 
 	// JSON error handler — bad body / thrown route errors come back as JSON, not
 	// an HTML stack page. (4-arg signature marks it as express error middleware.)

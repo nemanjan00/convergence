@@ -990,28 +990,29 @@ const importControls = (data, ui) => {
 
 // TOP LEVEL: the list of all playbooks. A card OPENS its workspace.
 const playbooksView = (data, ui) => {
-	const cards = el("div", { class: "pbgrid" }, () => {
-		ui.frame;
+	// Reactive card grid via qrp's list() — cards are DIRECT grid children (the
+	// old el("g",…) wrapper collapsed the grid in real browsers).
+	const cardOf = (book) => {
+		return el("div", {
+			class: "pbcard",
+			title: "open " + book.name,
+			onclick: () => { ui.openBook(book.id); }
+		},
+		el("div", { class: "top" },
+			el("div", { class: "nm" }, book.name),
+			el("span", { class: "pill pill-pb-" + book.state }, book.state)),
+		el("div", { class: "meta" },
+			el("span", {}, book.valid === false ? "✗ invalid" : "✓ valid"),
+			el("span", {}, book.schedule || "no schedule"),
+			el("span", {}, book.last_run_at ? ("ran " + String(book.last_run_at).slice(0, 10)) : "never run")),
+		el("div", { class: "actions" }, pbActionButtons(ui, book, true).concat([
+			el("button", { class: "btn btn-ghost", title: "open workspace",
+				onclick: (e) => { e.stopPropagation(); ui.openBook(book.id); } }, "open →")
+		])));
+	};
 
-		return el("g", {}, ui.playbooks.map((book) => {
-			return el("div", {
-				class: "pbcard",
-				title: "open " + book.name,
-				onclick: () => { ui.openBook(book.id); }
-			},
-			el("div", { class: "top" },
-				el("div", { class: "nm" }, book.name),
-				el("span", { class: "pill pill-pb-" + book.state }, book.state)),
-			el("div", { class: "meta" },
-				el("span", {}, book.valid === false ? "✗ invalid" : "✓ valid"),
-				el("span", {}, book.schedule || "no schedule"),
-				el("span", {}, book.last_run_at ? ("ran " + String(book.last_run_at).slice(0, 10)) : "never run")),
-			el("div", { class: "actions" }, pbActionButtons(ui, book, true).concat([
-				el("button", { class: "btn btn-ghost", title: "open workspace",
-					onclick: (e) => { e.stopPropagation(); ui.openBook(book.id); } }, "open →")
-			])));
-		}));
-	});
+	const cards = el("div", { class: "pbgrid" },
+		list(() => { ui.frame; return ui.playbooks; }, (book) => book.id, cardOf));
 
 	if (ui.playbooks.length === 0) {
 		return el("div", { class: "panel" },

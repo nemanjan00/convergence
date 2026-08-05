@@ -8,8 +8,9 @@
 		"node": ">=20"
 	},
 	"scripts": {
-		"web": "forever src",
-		"watch": "nodemon src",
+		"web": "yarn frontend:build-live && forever src",
+		"watch": "yarn frontend:build-live && nodemon src",
+		"frontend:build-live": "LIVE_ONLY=1 node bin/build-frontend.js",
 		"flow": "node bin/run.js",
 		"flow-watch": "nodemon bin/run.js",
 		"monitor": "forever bin/monitor.js",
