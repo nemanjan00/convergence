@@ -1,8 +1,29 @@
 # convergence
 
-Repeatable agentic recon. **An AI composes the dataflow; a deterministic engine
-runs it to a fixpoint.** The AI never runs the conveyor belt — it only designs
-the machine.
+> Repeatable agentic reconnaissance — **an AI composes the dataflow; a
+> deterministic engine runs it to a fixpoint.** The AI designs the machine; it
+> never runs the conveyor belt.
+
+![status: alpha](https://img.shields.io/badge/status-alpha-orange)
+![tests: 272 passing](https://img.shields.io/badge/tests-272%20passing-brightgreen)
+![blocks: 67](https://img.shields.io/badge/blocks-67-4ec9a5)
+![model: convergence fixpoint](https://img.shields.io/badge/model-convergence%20fixpoint-8a2be2)
+![Node.js · CommonJS](https://img.shields.io/badge/Node.js-CommonJS-339933?logo=node.js&logoColor=white)
+![MongoDB](https://img.shields.io/badge/store-MongoDB-47A248?logo=mongodb&logoColor=white)
+![MCP](https://img.shields.io/badge/AI-MCP-000000)
+![license: all rights reserved](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)
+
+> **Project status — honest version.** This is an **alpha / reference
+> implementation**, not a product. It runs end-to-end on live network with 272
+> passing tests, but: it's **single-process and in-memory** (Mongo persistence is
+> opt-in, not a Mongo-native store yet); there is **no served HTTP backend**, so
+> the frontend's play/pause and execution re-run are **UI-only** (drive them
+> today via MCP + `yarn playbooks`); there is **no auth**; and block I/O + the
+> flow spec **may still change**. Use it for research and self-hosted recon, not
+> production. Nothing here needs an API key. See [Status](#status) for the
+> real-vs-pending breakdown.
+
+The name is the execution model: enrichment blocks re-evaluate against each
 
 The name is the execution model: enrichment blocks re-evaluate against each
 entity's current **state** and re-run until nothing changes — so a fact ("port
