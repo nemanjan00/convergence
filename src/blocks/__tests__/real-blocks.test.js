@@ -6,7 +6,7 @@ const blocks = require("../index");
 describe("network blocks — offline tolerance", () => {
 	const map = blocks.allMap();
 
-	["dns.a", "port.scan", "http.title", "rdap", "ip.asn", "ip.geo", "ip.reverse", "mail.mx", "mail.auth"].forEach((name) => {
+	["dns.a", "port.scan", "http.title", "rdap", "ip.asn", "ip.geo", "ip.reverse", "tls.cert", "http.paths", "mail.mx", "mail.auth"].forEach((name) => {
 		it(name + " is registered", () => {
 			expect(map[name]).toBeDefined();
 		});

@@ -78,6 +78,28 @@ blocks:
       url: "https://{{ host.name }}"
     merge_into: host
 
+  # Live TLS certificate (issuer / expiry / SANs) — direct to the host.
+  - id: cert
+    uses: tls.cert
+    for_each: host
+    when:
+      host.open_ports: { $in: [443] }
+      host.cert_issuer: { $exists: false }
+    inputs:
+      host: "{{ host.name }}"
+    merge_into: host
+
+  # Light directory probe on web hosts (small, polite wordlist).
+  - id: paths
+    uses: http.paths
+    for_each: host
+    when:
+      host.open_ports: { $in: [80, 443] }
+      host.paths: { $exists: false }
+    inputs:
+      url: "https://{{ host.name }}"
+    merge_into: host
+
   # Mail exchangers (DNS MX).
   - id: mx
     uses: mail.mx
