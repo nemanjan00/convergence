@@ -91,18 +91,26 @@ API or MCP (`list/get/save/set_state/export/import_playbook`).
 
 ## Run it
 
-```bash
-# Docker: the whole thing (MongoDB + API + UI + scheduler)
-docker compose up --build          # -> http://localhost:3000
-docker compose run --rm app yarn flow   # one-shot: converge ct-recon (live)
+**Docker (one command).** Brings up MongoDB **and** the app (REST API + UI +
+active-playbook scheduler), wired together — the app waits for the DB via a
+healthcheck, and state persists in a named volume:
 
-# Local (Node 20+, yarn)
-yarn install
-yarn web       # the app: REST API + UI + scheduler -> http://localhost:3000
-yarn mcp       # MCP server (set CONVERGENCE_URL; defaults to localhost:3000)
+```bash
+docker compose up --build          # open http://localhost:3000
+docker compose run --rm app yarn flow    # one-shot: converge ct-recon (live)
+docker compose exec app yarn mcp         # MCP server, talking to the app's API
 ```
 
-Nothing here needs an API key.
+**Local** (Node 20+, yarn):
+
+```bash
+yarn install
+yarn web       # REST API + UI + scheduler -> http://localhost:3000
+yarn mcp       # MCP server (CONVERGENCE_URL, defaults to localhost:3000)
+```
+
+Nothing here needs an API key. (No auth on the API yet — keep it to localhost /
+a trusted network.)
 
 ## Data plane
 
@@ -156,13 +164,19 @@ threat-intel, forensics, and flow control (`filter`, `regex`, `js`, `cli`,
 `webhook`). Full catalog with input/output + composition scenarios in
 [`docs/BLOCKS.md`](docs/BLOCKS.md).
 
-Pending: engine **parent references** (reach a derived entity's ancestors in
-`inputs`/`when`/`filter`), a served HTTP backend (re-run from the Executions
-panel + inbound `source.webhook` route), and a Mongo-native store for
-explorer-at-scale. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+Pending: a **Mongo-native store** for explorer-at-scale, and **auth** on the
+served API. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Docs
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Flow spec (the contract)](docs/FLOW_SPEC.md)
 - [Block contract](docs/BLOCK_CONTRACT.md)
+- [Block & source catalog](docs/BLOCKS.md)
+- [Data model](docs/DATA_MODEL.md) · [Egress](docs/EGRESS.md)
+
+---
+
+<p align="center"><img src="docs/hero.svg" alt="convergence — an AI composes the dataflow; a deterministic engine runs it to a fixpoint" width="760"></p>
+
+<p align="center"><sub>◆ convergence · alpha · not affiliated with any vendor · use for authorized recon only</sub></p>

@@ -67,6 +67,11 @@ const hydrate = persistence
 	? persistence.loadPlaybooks(playbooks)
 		.then(() => { return persistence.loadJournal(journal); })
 		.then(() => { return persistence.load(store, collectEntityDefs()); })
+		.catch((error) => {
+			// Degrade instead of crash-looping: serve with an empty working set
+			// and let the next scheduler pass repopulate + re-persist.
+			console.error("hydrate failed, starting with empty state:", error.message);
+		})
 	: Promise.resolve();
 
 hydrate.then(() => {
