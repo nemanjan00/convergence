@@ -124,18 +124,22 @@ if (new Set(boxes.map((b) => b.left)).size < 2) { failures.push("builder: nodes 
 click(navByText("Graph"));
 if (q(".gnode.ent").length < 1) { failures.push("graph: no entity nodes"); }
 
-// --- Entities (explorer) — tree by default, drill + detail, then table toggle ---
+// --- Entities (explorer) — type groups at top, drill lineage, detail, table ---
 click(navByText("Entities"));
-if (q(".tnode").length < 1) { failures.push("explorer tree: no root nodes"); }
-// expand a root to reveal children
-const caret = q(".tnode .caret").find((c) => c.textContent === "▸");
+if (q(".tnode.tgroup").length < 1) { failures.push("explorer tree: no type groups at top level"); }
+// every entity type should appear as a top-level group (incl. child-only types)
+if (!q(".tnode.tgroup .tbadge").some((b) => b.textContent === "host")) {
+	failures.push("explorer tree: 'host' type not shown at top level");
+}
+// expand an entity that has lineage children
+const caret = q(".tnode:not(.tgroup) .caret").find((c) => c.textContent === "▸");
 if (caret) {
 	const before = q(".tnode").length;
 	click(caret);
-	if (q(".tnode").length <= before) { failures.push("explorer tree: expanding a root revealed no children"); }
+	if (q(".tnode").length <= before) { failures.push("explorer tree: expanding an entity revealed no children"); }
 }
-// select a node -> detail shows its fields
-click(q(".tnode .tlabel")[0]);
+// select an ENTITY (not a group) -> detail shows its fields
+click(q(".tnode:not(.tgroup) .tlabel")[0]);
 if (q(".detail .dfield").length < 1) { failures.push("explorer: selecting a node showed no fields"); }
 // table toggle
 const tableSeg = q(".seg-btn").find((b) => b.textContent === "table");

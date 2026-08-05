@@ -317,16 +317,34 @@ const explorer = (data, ui) => {
 		return el("div", {}, [row].concat(kids.map((k) => { return treeNode(k.id, k.rel, childPath); })));
 	};
 
+	// Top level = entity-TYPE groups (so every type is visible up top, even ones
+	// that are always children like a host materialized from an ip). Expanding a
+	// group lists its entities; expanding an entity follows the lineage.
+	const typeGroup = (type) => {
+		const gkey = "T:" + type;
+		const ents = (data.entities[type] || []).filter((e) => { return matchesQuery(e, ui.query); });
+		const open = ui.expanded[gkey] !== undefined ? ui.expanded[gkey] : ents.length <= 100;
+		const toggle = (e) => { e.stopPropagation(); ui.expanded[gkey] = !open; ui.frame = ui.frame + 1; };
+
+		const row = el("div", { class: "tnode tgroup" },
+			el("button", { class: "caret", onclick: toggle }, open ? "▾" : "▸"),
+			el("span", { class: "tbadge " + type }, type),
+			el("span", { class: "tlabel", onclick: toggle }, type),
+			el("span", { class: "count" }, String(ents.length)));
+
+		if (!open) { return row; }
+		if (ents.length === 0) { return el("div", {}, [row, el("div", { class: "muted", style: "padding-left:18px" }, "no matches")]); }
+
+		return el("div", {}, [row].concat(ents.map((e) => { return treeNode(idOf(type, e.key), null, new Set([gkey])); })));
+	};
+
 	const tree = el("div", { class: "tree scroll" }, () => {
 		ui.frame;
-		const roots = Object.keys(byId)
-			.filter((id) => { return !parents[id]; })
-			.filter((id) => { return matchesQuery(byId[id].entity, ui.query); })
-			.sort();
+		const groups = types.filter((t) => { return (data.entities[t] || []).length > 0; }).sort();
 
-		if (roots.length === 0) { return el("p", { class: "muted" }, "no root entities match"); }
+		if (groups.length === 0) { return el("p", { class: "muted" }, "no entities"); }
 
-		return el("div", {}, roots.map((id) => { return treeNode(id, null, new Set()); }));
+		return el("div", {}, groups.map(typeGroup));
 	});
 
 	// --- TABLE: dense per-type view (existing). ---
