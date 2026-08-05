@@ -66,7 +66,7 @@ const wires = document.querySelectorAll("svg.wires path.wire").length;
 // Editing: select a block, confirm the form renders, edit `relation`, and
 // confirm the live YAML round-trips the change.
 const blockNode = document.querySelector(".gnode.block");
-blockNode.dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+blockNode.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
 
 const formFields = document.querySelectorAll(".editor .field").length;
 

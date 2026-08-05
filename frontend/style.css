@@ -29,6 +29,7 @@ body {
 	font-size: 14px;
 	line-height: 1.5;
 	-webkit-font-smoothing: antialiased;
+	overflow-x: hidden; /* wide content scrolls inside its own container */
 }
 
 .app { display: flex; flex-direction: column; min-height: 100vh; }
@@ -166,6 +167,7 @@ h3 { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing
 	padding: 10px 13px;
 	cursor: grab;
 	user-select: none;
+	touch-action: none; /* let pointer-drag work on touch without scrolling */
 	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
 }
 
@@ -215,4 +217,40 @@ h3 { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing
 
 @media (prefers-reduced-motion: no-preference) {
 	.tab, .chip, .row, .gnode { transition: color .12s, background .12s, border-color .12s, box-shadow .12s; }
+}
+
+/* --- Responsive: phones --- */
+@media (max-width: 640px) {
+	header { flex-wrap: wrap; gap: 6px; padding: 12px 14px; }
+	.tabs { flex-wrap: wrap; padding: 8px 14px 0; }
+	.panel { padding: 14px; }
+	.canvas { height: 52vh; }
+	.search { max-width: 100%; }
+
+	/* Data inspector: wide table -> stacked per-entity cards. */
+	.scroll { border: 0; background: transparent; overflow-x: visible; }
+	table, tbody, tr, td { display: block; width: 100%; }
+	thead { display: none; }
+	tr.row {
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		background: var(--surface);
+		margin-bottom: 10px;
+		padding: 4px 2px;
+	}
+	tr.row.sel { border-color: var(--accent); background: var(--accent-weak); }
+	tbody td { border: 0; padding: 5px 12px; display: flex; gap: 10px; align-items: baseline; }
+	tbody td.muted { display: none; } /* hide empty fields on mobile cards */
+	tbody td::before {
+		content: attr(data-label);
+		flex: 0 0 92px;
+		color: var(--dim);
+		font-family: var(--mono);
+		font-size: 10px;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	tbody td.key { font-weight: 650; }
+	tbody td.key::before { color: var(--accent); }
+	.val { white-space: normal; }
 }

@@ -44,12 +44,12 @@ const matchesQuery = (row, query) => {
 	return JSON.stringify(row.fields).toLowerCase().indexOf(query.toLowerCase()) !== -1;
 };
 
-const cell = (field) => {
+const cell = (field, label) => {
 	if (!field) {
-		return el("td", { class: "muted" }, "—");
+		return el("td", { class: "muted", "data-label": label }, "—");
 	}
 
-	return el("td", {},
+	return el("td", { "data-label": label },
 		el("div", { class: "val" }, String(JSON.stringify(field.value)).replace(/^"|"$/g, "")),
 		el("span", { class: "prov" }, field.block)
 	);
@@ -92,8 +92,8 @@ const explorer = (data, ui) => {
 					return el("tr", {
 						class: () => (ui.selected === row.key ? "row sel" : "row"),
 						onclick: () => { ui.selected = row.key; }
-					}, [el("td", { class: "key" }, row.key)].concat(cols.map((c) => {
-						return cell(row.fields[c]);
+					}, [el("td", { class: "key", "data-label": "key" }, row.key)].concat(cols.map((c) => {
+						return cell(row.fields[c], c);
 					})));
 				}
 			))
@@ -258,7 +258,7 @@ const builder = (data, ui) => {
 		return el("div", {
 			class: () => "gnode " + node.kind + (node.kind === "block" && ui.block === b.id ? " sel" : ""),
 			style: () => { ui.frame; const p = ui.pos[node.id]; return "left:" + p.x + "px;top:" + p.y + "px"; },
-			onmousedown: (e) => {
+			onpointerdown: (e) => {
 				if (node.kind === "block") { ui.block = b.id; }
 				ui.drag = { id: node.id, px: e.clientX, py: e.clientY, ox: ui.pos[node.id].x, oy: ui.pos[node.id].y };
 				e.preventDefault();
@@ -437,7 +437,7 @@ const graphView = (data, ui) => {
 			return el("div", {
 				class: () => "gnode ent " + node.type + (ui.gsel === node.id ? " sel" : ""),
 				style: () => { ui.frame; const p = ui.pos[node.id]; return "left:" + p.x + "px;top:" + p.y + "px"; },
-				onmousedown: (e) => {
+				onpointerdown: (e) => {
 					ui.gsel = node.id;
 					ui.drag = { id: node.id, px: e.clientX, py: e.clientY, ox: ui.pos[node.id].x, oy: ui.pos[node.id].y };
 					e.preventDefault();
@@ -501,14 +501,15 @@ export const render = (root, data) => {
 		drag: null
 	});
 
-	// Dragging: document-level so the pointer can leave the node mid-drag.
-	document.addEventListener("mousemove", (e) => {
+	// Dragging via POINTER events so it works with mouse AND touch. Document-
+	// level so the pointer can leave the node mid-drag.
+	document.addEventListener("pointermove", (e) => {
 		if (!ui.drag) { return; }
 		ui.pos[ui.drag.id].x = ui.drag.ox + (e.clientX - ui.drag.px);
 		ui.pos[ui.drag.id].y = ui.drag.oy + (e.clientY - ui.drag.py);
 		ui.frame = ui.frame + 1;
 	});
-	document.addEventListener("mouseup", () => { ui.drag = null; });
+	document.addEventListener("pointerup", () => { ui.drag = null; });
 
 	const tabs = el("div", { class: "tabs" },
 		el("button", {
