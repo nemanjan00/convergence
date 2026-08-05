@@ -128,6 +128,14 @@ if (!palItem) {
 	}
 }
 
+// explicit save (no autosave): a Save button exists, and editing marks it dirty
+if (!q(".save-bar button").some((b) => /save/i.test(b.textContent))) {
+	failures.push("builder: no explicit Save flow button");
+}
+if (q(".save-bar .dirty").length < 1) {
+	failures.push("builder: editing did not mark the flow dirty (unsaved)");
+}
+
 // no overlap in the builder layout
 const boxes = q(".gnode").map((n) => {
 	const s = n.getAttribute("style") || "";

@@ -8,7 +8,7 @@
 // (frontend/__tests__), which is how the UI is verified without a browser.
 
 import { state, el, list, when, router, navigate } from "@nemanjan00/qrp";
-import { dump as dumpYamlLib } from "js-yaml";
+import { dump as dumpYamlLib, load as loadYamlLib } from "js-yaml";
 
 const dumpYaml = (spec) => {
 	// Serialize a plain clone so js-yaml never sees the reactive proxy.
@@ -527,8 +527,37 @@ const builder = (data, ui) => {
 		const laid = builderLayout(ui.graph, ui.narrow);
 		ui.graph.nodes.forEach((n) => { if (!ui.pos[n.id]) { ui.pos[n.id] = laid[n.id]; } });
 		ui.topo = ui.topo + 1;
+		ui.dirty = true;
 		ui.frame = ui.frame + 1;
 	};
+
+	// Mark the flow dirty (unsaved) after any edit + bump the reactive frame.
+	const touch = () => { ui.dirty = true; ui.frame = ui.frame + 1; };
+
+	// Explicit save — NO autosave. Writes the edited YAML back to the open
+	// playbook (re-validated server-side); local fallback for the static export.
+	const saveFlow = () => {
+		const yaml = dumpYaml(ui.spec);
+
+		if (ui.served && ui.openPlaybook) {
+			ui.api("PUT", "/api/playbooks/" + ui.openPlaybook, { yaml: yaml }).then((res) => {
+				ui.dirty = false;
+				const ok = !res || res.valid !== false;
+				return ui.refresh({ kind: ok ? "ok" : "err", msg: ok ? "Flow saved" : "Saved but INVALID: " + ((res.errors || []).join("; ") || "check the flow") });
+			});
+			return;
+		}
+
+		const book = ui.playbooks.find((x) => { return x.id === ui.openPlaybook; });
+		if (book) { book.yaml = yaml; }
+		ui.dirty = false;
+		ui.toast = { kind: "ok", msg: "Flow saved (local)" };
+		ui.frame = ui.frame + 1;
+	};
+
+	const saveBar = el("div", { class: "save-bar" },
+		el("button", { class: () => (ui.dirty ? "btn btn-accent" : "btn"), onclick: saveFlow }, "💾 Save flow"),
+		() => (ui.dirty ? el("span", { class: "dirty" }, "● unsaved changes") : el("span", { class: "muted" }, "no unsaved changes")));
 
 	const addBlock = (uses) => {
 		const ents = Object.keys(ui.spec.entities || {});
@@ -652,12 +681,12 @@ const builder = (data, ui) => {
 				oninput: (e) => {
 					const text = e.target.value.trim();
 
-					if (text === "") { delete block[key]; err.msg = ""; ui.frame = ui.frame + 1; return; }
+					if (text === "") { delete block[key]; err.msg = ""; touch(); return; }
 
 					try {
 						block[key] = JSON.parse(text);
 						err.msg = "";
-						ui.frame = ui.frame + 1;
+						touch();
 					} catch {
 						err.msg = "invalid JSON — not applied";
 					}
@@ -681,10 +710,10 @@ const builder = (data, ui) => {
 				el("div", { class: "ex" }, el("div", { class: "dk" }, "example out"), el("pre", {}, JSON.stringify(meta.example.out, null, 2)))));
 		}
 
-		parts.push(field("uses", el("input", { class: "in", value: block.uses, oninput: (e) => { block.uses = e.target.value; ui.frame = ui.frame + 1; } })));
-		parts.push(field("for_each", el("select", { class: "in", onchange: (e) => { block.for_each = e.target.value; ui.frame = ui.frame + 1; } }, options(block.for_each))));
-		parts.push(field("merge_into", el("select", { class: "in", onchange: (e) => { block.merge_into = e.target.value; ui.frame = ui.frame + 1; } }, options(block.merge_into))));
-		parts.push(field("relation", el("input", { class: "in", value: block.relation || "", oninput: (e) => { const v = e.target.value.trim(); if (v) { block.relation = v; } else { delete block.relation; } ui.frame = ui.frame + 1; } })));
+		parts.push(field("uses", el("input", { class: "in", value: block.uses, oninput: (e) => { block.uses = e.target.value; touch(); } })));
+		parts.push(field("for_each", el("select", { class: "in", onchange: (e) => { block.for_each = e.target.value; touch(); } }, options(block.for_each))));
+		parts.push(field("merge_into", el("select", { class: "in", onchange: (e) => { block.merge_into = e.target.value; touch(); } }, options(block.merge_into))));
+		parts.push(field("relation", el("input", { class: "in", value: block.relation || "", oninput: (e) => { const v = e.target.value.trim(); if (v) { block.relation = v; } else { delete block.relation; } touch(); } })));
 		parts.push(jsonField("when (sift query)", block, "when"));
 		parts.push(jsonField("inputs", block, "inputs"));
 		parts.push(jsonField("rate", block, "rate"));
@@ -722,6 +751,7 @@ const builder = (data, ui) => {
 
 	return el("div", { class: "panel builder" },
 		el("div", { class: "hint" }, "source → blocks → entities · drag to arrange · double-click a block to edit · add blocks from the palette →"),
+		saveBar,
 		canvas,
 		el("div", { class: "side" },
 			el("h3", {}, "add block"),
@@ -1392,8 +1422,6 @@ const parseLocation = () => {
 };
 
 export const render = (root, data) => {
-	const graph = computeGraph(data.spec || { entities: {}, sources: [], blocks: [] });
-
 	const entityTypes = Object.keys(data.entities);
 
 	// Graph view includes every type except very high-count ones (e.g. cert)
@@ -1417,6 +1445,16 @@ export const render = (root, data) => {
 	// The URL is the source of truth for where we are (deep-link + back/forward);
 	// a re-render re-derives it, so state survives refreshes.
 	const loc = parseLocation();
+
+	// The Flow builder edits the OPEN playbook's flow (parsed from its YAML), so
+	// Save writes back to the right playbook; falls back to the snapshot spec.
+	const openBook = loc.openPlaybook ? seedPlaybooks.find((b) => { return b.id === loc.openPlaybook; }) : null;
+	let flowSpec = data.spec || { entities: {}, sources: [], blocks: [] };
+	if (openBook && openBook.yaml) {
+		try { flowSpec = loadYamlLib(openBook.yaml) || flowSpec; } catch { /* keep fallback */ }
+	}
+	const graph = computeGraph(flowSpec);
+
 	const ui = state({
 		view: loc.view,
 		openPlaybook: loc.openPlaybook,
@@ -1438,7 +1476,8 @@ export const render = (root, data) => {
 		palQuery: "",
 		graph: graph,
 		pos: builderLayout(graph, narrow),
-		spec: data.spec,
+		spec: flowSpec,
+		dirty: false,
 		graphTypes: graphTypes,
 		gsel: null,
 		narrow: narrow,
@@ -1630,7 +1669,7 @@ export const render = (root, data) => {
 		root.__poll = setInterval(() => {
 			fetch("/api/health").then((r) => { return r.json(); }).then((h) => {
 				if (root.__lastRev === undefined) { root.__lastRev = h.rev; return; }
-				if (h.rev !== root.__lastRev && !ui.modal && !ui.drag && !ui.running) {
+				if (h.rev !== root.__lastRev && !ui.modal && !ui.drag && !ui.running && !ui.dirty) {
 					root.__lastRev = h.rev;
 					ui.refresh();
 				}
