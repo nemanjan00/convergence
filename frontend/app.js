@@ -888,26 +888,77 @@ const nameFromYaml = (yaml) => {
 // --- Playbook actions (shared by the list and the per-playbook overview) ---
 
 // Deliberate state change (no accidental one-click cycling). Activating starts
-// live recon on a schedule, so it confirms first.
+// live recon on a schedule, so it confirms via an in-app modal first.
 const pbSetState = (ui, book, target) => {
-	if (target === "active" && typeof window !== "undefined" && window.confirm) {
-		const ok = window.confirm("Activate \"" + book.name +
-			"\"?\n\nIt will run on its schedule and perform live reconnaissance against its targets.");
-		if (!ok) { return; }
-	}
+	const apply = () => {
+		if (ui.served) {
+			ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: target })
+				.then(() => { return ui.refresh({ kind: "ok", msg: target + " · " + book.name }); });
+			return;
+		}
 
-	if (ui.served) {
-		ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: target }).then(ui.refresh);
+		book.state = target;
+		ui.frame = ui.frame + 1;
+	};
+
+	if (target === "active") {
+		ui.modal = {
+			title: "Activate “" + book.name + "”?",
+			message: "It will run on its schedule and perform live reconnaissance against its targets.",
+			confirmLabel: "Activate",
+			onConfirm: apply
+		};
+		ui.frame = ui.frame + 1;
 		return;
 	}
 
-	book.state = target;
-	ui.frame = ui.frame + 1;
+	apply();
 };
 
+// Run once — a LIVE convergence that can take a while (or find nothing). Shows a
+// running state on the button and a result toast, so it's never "nothing".
 const pbRunNow = (ui, book) => {
-	if (!ui.served) { return; }
-	ui.api("POST", "/api/playbooks/" + book.id + "/run").then(ui.refresh);
+	if (!ui.served) {
+		ui.toast = { kind: "err", msg: "Run needs the served app (yarn web)." };
+		ui.frame = ui.frame + 1;
+		return;
+	}
+
+	ui.running = book.id;
+	ui.frame = ui.frame + 1;
+
+	ui.api("POST", "/api/playbooks/" + book.id + "/run").then((res) => {
+		if (res && res.error) {
+			ui.running = null;
+			ui.toast = { kind: "err", msg: "Run failed: " + res.error };
+			ui.frame = ui.frame + 1;
+			return;
+		}
+
+		const total = (res && res.entities)
+			? Object.keys(res.entities).reduce((sum, type) => { return sum + res.entities[type].length; }, 0)
+			: 0;
+
+		ui.refresh({ kind: "ok", msg: "Ran " + book.name + " — " + total + " entities" });
+	}).catch((error) => {
+		ui.running = null;
+		ui.toast = { kind: "err", msg: "Run failed: " + error.message };
+		ui.frame = ui.frame + 1;
+	});
+};
+
+// In-app confirmation modal.
+const modalEl = (ui, modal) => {
+	const close = () => { ui.modal = null; ui.frame = ui.frame + 1; };
+
+	return el("div", { class: "modal-backdrop", onclick: close },
+		el("div", { class: "modal", onclick: (e) => { e.stopPropagation(); } },
+			el("h3", {}, modal.title),
+			el("p", {}, modal.message),
+			el("div", { class: "modal-actions" },
+				el("button", { class: "btn", onclick: close }, "Cancel"),
+				el("button", { class: "btn btn-accent", onclick: () => { close(); modal.onConfirm(); } },
+					modal.confirmLabel || "Confirm"))));
 };
 
 const pbActivateAttrs = (ui, book, stop) => {
@@ -935,8 +986,11 @@ const pbActionButtons = (ui, book, stop) => {
 				onclick: guard(() => { pbSetState(ui, book, "paused"); }) }, "⏸ pause")
 			: el("button", pbActivateAttrs(ui, book, stop), "⚡ activate"),
 		ui.served
-			? el("button", { class: "btn btn-accent", title: "converge once now",
-				onclick: guard(() => { pbRunNow(ui, book); }) }, "▶ run once")
+			? el("button", {
+				class: () => (ui.running === book.id ? "btn btn-accent running" : "btn btn-accent"),
+				title: "converge once now",
+				onclick: guard(() => { pbRunNow(ui, book); })
+			}, () => (ui.running === book.id ? "⟳ running…" : "▶ run once"))
 			: el("span", {})
 	];
 };
@@ -1104,6 +1158,9 @@ export const render = (root, data) => {
 		openPlaybook: data.__openPlaybook || null,
 		served: Boolean(data.__served),
 		playbooks: seedPlaybooks,
+		modal: null,
+		toast: data.__toast || null,
+		running: null,
 		pbSel: data.__pbSel || null,
 		pbExport: null,
 		pbImportText: "",
@@ -1150,7 +1207,7 @@ export const render = (root, data) => {
 		}).then((response) => { return response.json(); });
 	};
 
-	ui.refresh = () => {
+	ui.refresh = (toast) => {
 		return fetch("/api/snapshot")
 			.then((response) => { return response.json(); })
 			.then((fresh) => {
@@ -1160,6 +1217,7 @@ export const render = (root, data) => {
 				fresh.__view = ui.view;
 				fresh.__openPlaybook = ui.openPlaybook;
 				fresh.__pbSel = ui.pbSel;
+				if (toast) { fresh.__toast = toast; }
 				root.innerHTML = "";
 				render(root, fresh);
 			});
@@ -1262,9 +1320,25 @@ export const render = (root, data) => {
 	const main = el("main", { class: "main" }, topbar,
 		el("div", {}, when(() => ui.view, (view) => (views[view] || views.playbooks)())));
 
-	const app = el("div", { class: "shell" }, sidebar, main);
+	// Overlay layer: modal (confirmations) + transient toast. Reactive on frame.
+	const overlay = el("div", {}, () => {
+		ui.frame;
+		const parts = [];
+
+		if (ui.modal) { parts.push(modalEl(ui, ui.modal)); }
+		if (ui.toast) { parts.push(el("div", { class: "toast " + (ui.toast.kind || "") }, ui.toast.msg)); }
+
+		return el("div", {}, parts);
+	});
+
+	const app = el("div", { class: "shell" }, sidebar, main, overlay);
 
 	root.appendChild(app);
+
+	// Auto-dismiss a toast after a few seconds.
+	if (ui.toast && typeof setTimeout !== "undefined") {
+		setTimeout(() => { ui.toast = null; ui.frame = ui.frame + 1; }, 4500);
+	}
 
 	return app;
 };

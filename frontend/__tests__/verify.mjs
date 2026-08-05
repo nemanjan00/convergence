@@ -61,6 +61,16 @@ if (!chip) {
 	if (q(".pbcard").length !== before + 1) { failures.push("home: importing a sample did not add a card"); }
 }
 
+// activating a draft opens a confirmation MODAL (not window.confirm)
+const activateBtn = q(".pbcard .actions button").find((b) => /activate/i.test(b.textContent));
+if (activateBtn) {
+	click(activateBtn);
+	if (!document.querySelector(".modal-backdrop")) { failures.push("activate did not open a modal"); }
+	const confirmBtn = q(".modal .btn-accent")[0];
+	if (confirmBtn) { click(confirmBtn); }
+	if (document.querySelector(".modal-backdrop")) { failures.push("modal did not close after confirm"); }
+}
+
 // --- open the first playbook -> full re-render to the PLAYBOOK PAGE ---
 click(q(".pbcard")[0]);
 
