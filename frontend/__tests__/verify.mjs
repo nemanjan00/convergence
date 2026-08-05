@@ -47,19 +47,32 @@ const data = {
 
 app.render(document.body, data);
 
+// Explorer (default view)
 const rows = document.querySelectorAll("tbody tr").length;
 const tabs = document.querySelectorAll(".tab").length;
 const hasHost = document.body.innerHTML.indexOf("a.example.com") !== -1;
+
+// Switch to the flow builder and check the node canvas rendered.
+const builderTab = Array.from(document.querySelectorAll(".tab"))
+	.find((t) => t.textContent.indexOf("builder") !== -1);
+builderTab.click();
+
+// nodes = 1 source + 2 entities + 2 blocks = 5; edges = 1 + 2*2 = 5 wires.
+const nodes = document.querySelectorAll(".gnode").length;
+const wires = document.querySelectorAll("svg.wires path.wire").length;
 
 const failures = [];
 if (rows < 1) { failures.push("no table rows rendered"); }
 if (tabs !== 2) { failures.push("expected 2 tabs, got " + tabs); }
 if (!hasHost) { failures.push("host value not in DOM"); }
+if (nodes !== 5) { failures.push("expected 5 canvas nodes, got " + nodes); }
+if (wires !== 5) { failures.push("expected 5 wires, got " + wires); }
 
 if (failures.length > 0) {
 	console.error("FRONTEND RENDER FAILED:\n  - " + failures.join("\n  - "));
 	process.exit(1);
 }
 
-console.log("frontend render OK — rows=" + rows + " tabs=" + tabs + " host=" + hasHost);
+console.log("frontend render OK — rows=" + rows + " tabs=" + tabs +
+	" nodes=" + nodes + " wires=" + wires);
 process.exit(0);

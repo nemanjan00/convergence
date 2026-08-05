@@ -1,16 +1,21 @@
 // convergence frontend (qrp) — two surfaces over one flow result:
 //   - Explorer: entity tables with per-field provenance + a query box + lineage
-//   - Builder:  the flow as a typed graph of source -> blocks -> entities
+//   - Builder:  an n8n-style node canvas — source/blocks/entities wired by the
+//     real dataflow, draggable, with an inspector + YAML
 //
 // ESM by nature (qrp is ESM). `render(root, data)` has no top-level side effects
 // so it runs both in the browser (frontend/entry.js) and under happy-dom in Node
 // (frontend/__tests__), which is how the UI is verified without a browser.
-//
-// data = { flow, yaml, entities: { type: [ {type,key,version,fields:{name:{value,block,at}}} ] }, edges: [...] }
 
 import { state, el, list, when } from "@nemanjan00/qrp";
 
-// Distinct field names across a type's entities, in first-seen order.
+const NODE_W = 184;
+const NODE_H = 62;
+const COL = 260;
+const ROW = 104;
+
+// --- Explorer -------------------------------------------------------------
+
 const columnsFor = (rows) => {
 	const seen = [];
 
@@ -44,8 +49,6 @@ const cell = (field) => {
 	);
 };
 
-// --- Explorer -------------------------------------------------------------
-
 const explorer = (data, ui) => {
 	const types = Object.keys(data.entities);
 
@@ -66,8 +69,7 @@ const explorer = (data, ui) => {
 	const tableWrap = el("div", { class: "scroll" },
 		el("table", {},
 			el("thead", {}, () => {
-				const rows = data.entities[ui.type] || [];
-				const cols = columnsFor(rows);
+				const cols = columnsFor(data.entities[ui.type] || []);
 
 				return el("tr", {}, [el("th", {}, "key")].concat(cols.map((c) => {
 					return el("th", {}, c);
@@ -75,8 +77,7 @@ const explorer = (data, ui) => {
 			}),
 			el("tbody", {}, list(
 				() => {
-					const rows = data.entities[ui.type] || [];
-					return rows.filter((r) => matchesQuery(r, ui.query));
+					return (data.entities[ui.type] || []).filter((r) => matchesQuery(r, ui.query));
 				},
 				(row) => ui.type + "|" + row.key,
 				(row) => {
@@ -94,13 +95,13 @@ const explorer = (data, ui) => {
 	);
 
 	const lineage = el("div", { class: "lineage" }, () => {
-		const related = data.edges.filter((edge) => {
-			return edge.from.key === ui.selected || edge.to.key === ui.selected;
-		});
-
 		if (!ui.selected) {
 			return el("p", { class: "muted" }, "select a row to see its lineage");
 		}
+
+		const related = data.edges.filter((edge) => {
+			return edge.from.key === ui.selected || edge.to.key === ui.selected;
+		});
 
 		if (related.length === 0) {
 			return el("p", { class: "muted" }, "no edges for " + ui.selected);
@@ -119,80 +120,193 @@ const explorer = (data, ui) => {
 		el("h3", {}, "lineage"), lineage);
 };
 
-// --- Builder --------------------------------------------------------------
+// --- Builder graph model --------------------------------------------------
 
-const badge = (label, kind) => {
-	return el("span", { class: "badge " + (kind || "") }, label);
+// Build nodes + edges + a layered left-to-right layout from the flow spec.
+const computeGraph = (spec) => {
+	const sources = spec.sources || [];
+	const blocks = spec.blocks || [];
+	const entityTypes = Object.keys(spec.entities || {});
+
+	const nodes = [];
+	const push = (id, kind, title, sub, meta) => {
+		nodes.push({ id: id, kind: kind, title: title, sub: sub, meta: meta || {} });
+	};
+
+	sources.forEach((s) => { push("S:" + s.id, "source", s.id, s.block, { emits: s.emits }); });
+	entityTypes.forEach((t) => { push("E:" + t, "entity", t, "key: " + (spec.entities[t].key || []).join(", "), {}); });
+	blocks.forEach((b) => { push("B:" + b.id, "block", b.id, b.uses, { block: b }); });
+
+	const edges = [];
+	sources.forEach((s) => { edges.push({ from: "S:" + s.id, to: "E:" + s.emits }); });
+	blocks.forEach((b) => {
+		edges.push({ from: "E:" + b.for_each, to: "B:" + b.id });
+		edges.push({ from: "B:" + b.id, to: "E:" + b.merge_into, rel: b.relation });
+	});
+
+	// Layer depth: source(0) -> emitted entity(1) -> block -> merge_into entity.
+	const depth = {};
+	sources.forEach((s) => { depth["S:" + s.id] = 0; });
+	sources.forEach((s) => { if (depth["E:" + s.emits] === undefined) { depth["E:" + s.emits] = 1; } });
+
+	for (let i = 0; i < blocks.length + 2; i++) {
+		blocks.forEach((b) => {
+			const fe = "E:" + b.for_each;
+
+			if (depth[fe] !== undefined) {
+				const bd = "B:" + b.id;
+
+				if (depth[bd] === undefined) { depth[bd] = depth[fe] + 1; }
+
+				const me = "E:" + b.merge_into;
+
+				if (depth[me] === undefined) { depth[me] = depth[bd] + 1; }
+			}
+		});
+	}
+
+	nodes.forEach((n) => { if (depth[n.id] === undefined) { depth[n.id] = 0; } });
+
+	const byDepth = {};
+	nodes.forEach((n) => { (byDepth[depth[n.id]] = byDepth[depth[n.id]] || []).push(n); });
+
+	const pos = {};
+	Object.keys(byDepth).forEach((d) => {
+		byDepth[d].forEach((n, i) => {
+			pos[n.id] = { x: 40 + Number(d) * COL, y: 34 + i * ROW };
+		});
+	});
+
+	return { nodes: nodes, edges: edges, pos: pos };
+};
+
+const wirePath = (a, b) => {
+	const sx = a.x + NODE_W;
+	const sy = a.y + NODE_H / 2;
+	const ex = b.x;
+	const ey = b.y + NODE_H / 2;
+	const dx = Math.max(40, Math.abs(ex - sx) * 0.5);
+
+	return "M " + sx + "," + sy + " C " + (sx + dx) + "," + sy + " " + (ex - dx) + "," + ey + " " + ex + "," + ey;
 };
 
 const builder = (data, ui) => {
-	const spec = data.spec;
+	const graph = ui.graph;
 
-	const sourceCards = (spec.sources || []).map((source) => {
-		return el("div", { class: "node source" },
-			el("div", { class: "node-h" }, source.id),
-			el("div", { class: "node-b" }, source.block),
-			el("div", {}, "emits ", badge(source.emits, "out"))
-		);
-	});
+	const stageW = () => {
+		ui.frame;
+		return Math.max.apply(null, graph.nodes.map((n) => ui.pos[n.id].x + NODE_W + 60));
+	};
+	const stageH = () => {
+		ui.frame;
+		return Math.max.apply(null, graph.nodes.map((n) => ui.pos[n.id].y + NODE_H + 60));
+	};
 
-	const blockCards = (spec.blocks || []).map((block) => {
-		const derives = block.for_each !== block.merge_into;
-
-		return el("div", {
-			class: () => (ui.block === block.id ? "node block sel" : "node block"),
-			onclick: () => { ui.block = block.id; }
-		},
-		el("div", { class: "node-h" }, block.id),
-		el("div", { class: "node-b" }, block.uses),
-		el("div", {},
-			badge(block.for_each, "in"),
-			el("span", { class: "arrow" }, derives ? " ⇒ " : " → "),
-			badge(block.merge_into, "out")
+	const wires = el("svg", { class: "wires", width: stageW, height: stageH },
+		el("defs", {},
+			el("marker", {
+				id: "arrow", viewBox: "0 0 10 10", refX: "9", refY: "5",
+				markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse"
+			}, el("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--wire)" }))
 		),
-		block.relation ? el("div", { class: "muted" }, "rel: " + block.relation) : ""
-		);
-	});
-
-	const entityCards = Object.keys(spec.entities || {}).map((type) => {
-		return el("div", { class: "node entity" },
-			el("div", { class: "node-h" }, type),
-			el("div", { class: "muted" }, "key: " + (spec.entities[type].key || []).join(", "))
-		);
-	});
-
-	const graph = el("div", { class: "graph" },
-		el("div", { class: "col" }, el("h4", {}, "sources"), sourceCards),
-		el("div", { class: "col" }, el("h4", {}, "blocks"), blockCards),
-		el("div", { class: "col" }, el("h4", {}, "entities"), entityCards)
+		graph.edges.map((edge) => {
+			return el("path", {
+				class: () => {
+					const hot = ("B:" + ui.block) === edge.from || ("B:" + ui.block) === edge.to;
+					return hot ? "wire hot" : "wire";
+				},
+				"marker-end": "url(#arrow)",
+				d: () => {
+					ui.frame;
+					return wirePath(ui.pos[edge.from], ui.pos[edge.to]);
+				}
+			});
+		})
 	);
 
+	const nodeEls = graph.nodes.map((node) => {
+		const b = node.meta.block;
+
+		const meta = [];
+		if (node.kind === "source") { meta.push(el("span", { class: "badge" }, "emits " + node.meta.emits)); }
+		if (b) {
+			meta.push(el("span", { class: "badge" }, "for " + b.for_each));
+			if (b.relation) { meta.push(el("span", { class: "badge rel" }, b.relation)); }
+		}
+
+		return el("div", {
+			class: () => "gnode " + node.kind + (node.kind === "block" && ui.block === b.id ? " sel" : ""),
+			style: () => {
+				ui.frame;
+				const p = ui.pos[node.id];
+				return "left:" + p.x + "px;top:" + p.y + "px";
+			},
+			onmousedown: (e) => {
+				if (node.kind === "block") { ui.block = b.id; }
+				ui.drag = {
+					id: node.id,
+					px: e.clientX, py: e.clientY,
+					ox: ui.pos[node.id].x, oy: ui.pos[node.id].y
+				};
+				e.preventDefault();
+			}
+		},
+		el("div", { class: "port in" }),
+		el("div", { class: "port out" }),
+		el("div", { class: "kind" }, node.kind),
+		el("div", { class: "title" }, node.title),
+		el("div", { class: "sub" }, node.sub),
+		meta.length ? el("div", { class: "meta" }, meta) : "");
+	});
+
+	const canvas = el("div", { class: "canvas" },
+		el("div", { class: "stage", style: () => { ui.frame; return "width:" + stageW() + "px;height:" + stageH() + "px"; } },
+			wires, nodeEls));
+
 	const inspector = el("div", { class: "inspector" }, () => {
-		const block = (spec.blocks || []).find((b) => b.id === ui.block);
+		const block = (data.spec.blocks || []).find((x) => x.id === ui.block);
 
 		if (!block) {
-			return el("p", { class: "muted" }, "select a block to inspect");
+			return el("p", { class: "muted" }, "drag nodes to arrange · click a block to inspect");
 		}
 
 		return el("pre", {}, JSON.stringify(block, null, 2));
 	});
 
-	return el("div", { class: "panel" }, graph,
-		el("h3", {}, "inspector"), inspector,
-		el("h3", {}, "flow yaml"),
-		el("pre", { class: "yaml scroll" }, data.yaml || ""));
+	return el("div", { class: "panel builder" },
+		el("div", { class: "hint" }, "source → blocks → entities · wired by for_each / merge_into · drag to arrange"),
+		canvas,
+		el("div", { class: "side" },
+			el("h3", {}, "inspector"), inspector,
+			el("h3", {}, "flow yaml"),
+			el("pre", { class: "yaml scroll" }, data.yaml || "")));
 };
 
 // --- Shell ----------------------------------------------------------------
 
 export const render = (root, data) => {
+	const graph = computeGraph(data.spec || { entities: {}, sources: [], blocks: [] });
+
 	const ui = state({
 		view: "explorer",
 		type: Object.keys(data.entities)[0],
 		query: "",
 		selected: null,
-		block: null
+		block: null,
+		graph: graph,
+		pos: graph.pos,
+		frame: 0,
+		drag: null
 	});
+
+	// Dragging: document-level so the pointer can leave the node mid-drag.
+	document.addEventListener("mousemove", (e) => {
+		if (!ui.drag) { return; }
+		ui.pos[ui.drag.id].x = ui.drag.ox + (e.clientX - ui.drag.px);
+		ui.pos[ui.drag.id].y = ui.drag.oy + (e.clientY - ui.drag.py);
+		ui.frame = ui.frame + 1;
+	});
+	document.addEventListener("mouseup", () => { ui.drag = null; });
 
 	const tabs = el("div", { class: "tabs" },
 		el("button", {
