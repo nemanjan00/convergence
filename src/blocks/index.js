@@ -12,6 +12,7 @@
 const BLOCK_MODULES = [
 	"./fanout",
 	"./filter",
+	"./regex",
 	"./dns",
 	"./dns-aaaa",
 	"./dns-txt",

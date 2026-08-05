@@ -56,6 +56,65 @@ describe("logic blocks", () => {
 		});
 	});
 
+	describe("regex", () => {
+		it("field map: first match, capture group 1", () => {
+			return map["regex"].handler({
+				text: "Server: nginx/1.25.3\nX-Powered-By: PHP/8.2",
+				fields: { server: "Server:\\s*(.+)" }
+			}).then((fields) => {
+				expect(fields.server).toBe("nginx/1.25.3");
+			});
+		});
+
+		it("all: collects every match into an array", () => {
+			return map["regex"].handler({
+				text: "contact a@x.com or b@y.org",
+				fields: { emails: { pattern: "[\\w.+-]+@[\\w.-]+", all: true } }
+			}).then((fields) => {
+				expect(fields.emails).toEqual(["a@x.com", "b@y.org"]);
+			});
+		});
+
+		it("nested parser: each match parsed into an object", () => {
+			return map["regex"].handler({
+				text: "web01 8080\nweb02 9090",
+				fields: {
+					hosts: { pattern: "\\S+ \\d+", all: true, parser: { name: "(\\S+) ", port: " (\\d+)" } }
+				}
+			}).then((fields) => {
+				expect(fields.hosts).toEqual([
+					{ name: "web01", port: "8080" },
+					{ name: "web02", port: "9090" }
+				]);
+			});
+		});
+
+		it("pairs: dynamic key/value into an object", () => {
+			return map["regex"].handler({
+				text: "Server: nginx\nX-Cache: HIT\nVia: 1.1 cdn",
+				fields: { headers: { pattern: "^([\\w-]+):\\s*(.+)$", flags: "m", pairs: true } }
+			}).then((fields) => {
+				expect(fields.headers).toEqual({ "Server": "nginx", "X-Cache": "HIT", "Via": "1.1 cdn" });
+			});
+		});
+
+		it("is tolerant: bad pattern on one field doesn't drop the others", () => {
+			return map["regex"].handler({
+				text: "ok: yes",
+				fields: { good: "ok:\\s*(\\w+)", bad: "([" }
+			}).then((fields) => {
+				expect(fields.good).toBe("yes");
+				expect(fields.bad).toBeUndefined();
+			});
+		});
+
+		it("empty / no map => {}", () => {
+			return map["regex"].handler({ text: "x" }).then((fields) => {
+				expect(fields).toEqual({});
+			});
+		});
+	});
+
 	describe("filter", () => {
 		it("array-select: keeps only the matching elements of a field", () => {
 			// The user's flow: keep only the TXT records that are SPF.
