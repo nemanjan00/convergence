@@ -70,6 +70,26 @@ blockNode.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
 
 const formFields = document.querySelectorAll(".editor .field").length;
 
+// Layered placement: the builder nodes must not overlap (that is the whole
+// point of the layout algorithm) and must occupy more than one column (i.e. the
+// layers actually spread along the flow direction, not one big pile).
+const boxes = Array.from(document.querySelectorAll(".gnode")).map((n) => {
+	const style = n.getAttribute("style") || "";
+	const left = Number((style.match(/left:\s*(-?[\d.]+)px/) || [])[1]);
+	const top = Number((style.match(/top:\s*(-?[\d.]+)px/) || [])[1]);
+	return { left: left, top: top, right: left + 184, bottom: top + 62 };
+});
+
+let overlaps = 0;
+boxes.forEach((a, i) => {
+	boxes.slice(i + 1).forEach((b) => {
+		const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+		if (!apart) { overlaps = overlaps + 1; }
+	});
+});
+
+const columns = new Set(boxes.map((b) => b.left)).size;
+
 const relationInput = Array.from(document.querySelectorAll(".editor .field")).map((f) => {
 	return { label: f.querySelector("label").textContent, input: f.querySelector("input") };
 }).find((f) => f.label === "relation").input;
@@ -86,6 +106,8 @@ if (!hasHost) { failures.push("host value not in DOM"); }
 if (nodes !== 5) { failures.push("expected 5 canvas nodes, got " + nodes); }
 if (wires !== 4) { failures.push("expected 4 wires (in-place enrichment = 1 wire), got " + wires); }
 if (formFields < 7) { failures.push("editor form did not render, fields=" + formFields); }
+if (overlaps > 0) { failures.push("layout produced " + overlaps + " overlapping node pair(s)"); }
+if (columns < 2) { failures.push("layout did not spread nodes across layers (columns=" + columns + ")"); }
 if (yamlText.indexOf("verified_edit") === -1) { failures.push("block edit did not round-trip into YAML"); }
 
 // Switch to the discovery graph and check nodes + edges render.
@@ -95,6 +117,35 @@ graphTab.click();
 
 const graphNodes = document.querySelectorAll(".gnode.ent").length;
 if (graphNodes < 1) { failures.push("graph rendered no entity nodes"); }
+
+// Phone orientation: render fresh at a narrow width and confirm the layout
+// flips to vertical (nodes stack down, not across) and still never overlaps.
+window.innerWidth = 390;
+document.body.innerHTML = "";
+app.render(document.body, data);
+
+Array.from(document.querySelectorAll(".tab"))
+	.find((t) => t.textContent.indexOf("builder") !== -1)
+	.click();
+
+const nboxes = Array.from(document.querySelectorAll(".gnode")).map((n) => {
+	const style = n.getAttribute("style") || "";
+	const left = Number((style.match(/left:\s*(-?[\d.]+)px/) || [])[1]);
+	const top = Number((style.match(/top:\s*(-?[\d.]+)px/) || [])[1]);
+	return { left: left, top: top, right: left + 184, bottom: top + 62 };
+});
+
+let noverlaps = 0;
+nboxes.forEach((a, i) => {
+	nboxes.slice(i + 1).forEach((b) => {
+		const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+		if (!apart) { noverlaps = noverlaps + 1; }
+	});
+});
+
+const nrows = new Set(nboxes.map((b) => b.top)).size;
+if (noverlaps > 0) { failures.push("narrow layout produced " + noverlaps + " overlapping node pair(s)"); }
+if (nrows < 2) { failures.push("narrow layout did not stack nodes vertically (rows=" + nrows + ")"); }
 
 if (failures.length > 0) {
 	console.error("FRONTEND RENDER FAILED:\n  - " + failures.join("\n  - "));
