@@ -76,6 +76,42 @@ describe("store merge strategies", () => {
 	});
 });
 
+describe("store typed-field auto-linking", () => {
+	beforeEach(() => {
+		store._reset();
+	});
+
+	it("materializes a linked entity + edge when a typed field is written", () => {
+		store.define("ip", { key: ["address"] });
+		store.define("host", {
+			key: ["name"],
+			fields: { ip: { links: "ip", as: "address", rel: "resolves_to" } }
+		});
+
+		store.upsert("host", { name: "a.com", ip: "1.2.3.4" }, provenanceAt("resolve", "t"));
+
+		const ips = store.all("ip");
+		expect(ips).toHaveLength(1);
+		expect(ips[0].fields.address.value).toBe("1.2.3.4");
+
+		const edges = store.edges({ fromType: "host" });
+		expect(edges).toHaveLength(1);
+		expect(edges[0].rel).toBe("resolves_to");
+		expect(edges[0].to.type).toBe("ip");
+	});
+
+	it("does not re-link on a no-op re-write (idempotent)", () => {
+		store.define("ip", { key: ["address"] });
+		store.define("host", { key: ["name"], fields: { ip: { links: "ip", as: "address" } } });
+
+		store.upsert("host", { name: "a.com", ip: "1.2.3.4" }, provenanceAt("resolve", "t1"));
+		store.upsert("host", { name: "a.com", ip: "1.2.3.4" }, provenanceAt("resolve", "t2"));
+
+		expect(store.all("ip")).toHaveLength(1);
+		expect(store.edges()).toHaveLength(1);
+	});
+});
+
 describe("store edges", () => {
 	beforeEach(() => {
 		store._reset();

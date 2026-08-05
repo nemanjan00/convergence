@@ -11,8 +11,8 @@
 const got = require("got-verbose");
 
 const CRTSH_URL = "https://crt.sh/";
-const RETRIES = 4;
-const RETRY_DELAY_MS = 2000;
+const RETRIES = 8;
+const RETRY_DELAY_MS = 3000;
 
 const crtsh = {
 	_client: got,

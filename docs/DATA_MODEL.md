@@ -62,6 +62,34 @@ Field provenance answers "which block set this value." **Lineage** answers "whic
 - The parent is **not consumed or mutated** by derivation — it stays as its own
   entity and pivot point.
 
+## Typed fields that build the graph
+
+An entity type may give a field a **type hint** that `links` it to another entity
+type. When a block writes such a field, the engine **auto-materializes** the
+linked entity (keyed by the field's value) and records an edge — so typed fields
+grow the graph on their own. It is a generalization of `fanout`: any typed value
+can spawn/connect an entity.
+
+```yaml
+entities:
+  host:
+    key: [name]
+    fields:
+      ip:                    # host.ip is an `ip`
+        links: ip            #   -> materialize an `ip` entity keyed by...
+        as: address          #   ...address = <the value>
+        rel: resolves_to     #   with edge host --resolves_to--> ip
+  ip:
+    key: [address]
+```
+
+Now any block that sets `host.ip` (dns, a cert grab, a leak dump — a million
+paths) causes the same `ip` node to exist and link, and blocks `for_each: ip`
+enrich it. Types are a property of the DATA, not the plumbing — unlike
+port-typed dataflow tools where types live on the edges. Array-valued fields
+link one entity per element. Linking is idempotent (no-op re-writes don't
+re-link).
+
 ## Merge strategies (convergence depends on this)
 
 Convergence terminates only if entity state is **monotonic** (facts accumulate,

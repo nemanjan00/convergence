@@ -95,6 +95,17 @@ const loader = {
 			if (!Array.isArray(entities[type].key) || entities[type].key.length === 0) {
 				errors.push("entity '" + type + "' needs a non-empty key array");
 			}
+
+			// A field `links` hint must target a declared entity type.
+			const fieldDefs = entities[type].fields || {};
+			Object.keys(fieldDefs).forEach((name) => {
+				const spec = fieldDefs[name];
+
+				if (spec && spec.links && !entities[spec.links]) {
+					errors.push("entity '" + type + "' field '" + name +
+						"' links to undeclared entity '" + spec.links + "'");
+				}
+			});
 		});
 
 		// Unique ids across sources and blocks.
@@ -190,7 +201,8 @@ const loader = {
 		Object.keys(spec.entities).forEach((type) => {
 			entities[type] = {
 				key: spec.entities[type].key,
-				merge: spec.entities[type].merge || "last-write-wins-with-provenance"
+				merge: spec.entities[type].merge || "last-write-wins-with-provenance",
+				fields: spec.entities[type].fields || {}
 			};
 		});
 

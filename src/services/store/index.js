@@ -112,6 +112,10 @@ const store = {
 		store._collections[entityType] = {
 			keyFields: opts.key || ["id"],
 			strategy: opts.merge || DEFAULT_STRATEGY,
+			// Field type hints. An entry with `links` auto-materializes a linked
+			// entity + edge when that field is written (typed fields build the
+			// graph). See docs/DATA_MODEL.md.
+			fieldLinks: opts.fields || {},
 			// Preserve already-loaded entities so hydrating from Mongo before a
 			// run survives the engine re-defining the type (runs accumulate).
 			byIdentity: existing ? existing.byIdentity : {}
@@ -143,6 +147,7 @@ const store = {
 		// know when an entity settled (a no-op write keeps the same field object,
 		// so the version does not move and the fixpoint terminates).
 		const nextFields = Object.assign({}, existing.fields);
+		const changedFields = {};
 		let changed = false;
 
 		Object.keys(fields).forEach((name) => {
@@ -155,6 +160,7 @@ const store = {
 
 			if (nextField !== existing.fields[name]) {
 				changed = true;
+				changedFields[name] = true;
 			}
 
 			nextFields[name] = nextField;
@@ -168,6 +174,42 @@ const store = {
 		};
 
 		collection.byIdentity[identity] = merged;
+
+		// Typed-field auto-linking: a changed field with a `links` hint
+		// materializes the linked entity (keyed by its value) and records an
+		// edge. This is how typed fields build the entity graph.
+		Object.keys(changedFields).forEach((name) => {
+			const spec = collection.fieldLinks[name];
+
+			if (!spec || !spec.links) {
+				return;
+			}
+
+			const targetType = spec.links;
+			const targetKey = spec.as || name;
+			const rel = spec.rel || name;
+			const raw = fields[name];
+			const values = Array.isArray(raw) ? raw : [raw];
+
+			values.forEach((value) => {
+				if (value === null || value === undefined) {
+					return;
+				}
+
+				const seed = {};
+				seed[targetKey] = value;
+
+				const target = store.upsert(targetType, seed, provenance);
+
+				store.addEdge({
+					from: { type: entityType, key: identity },
+					rel: rel,
+					to: { type: targetType, key: target._identity },
+					via: provenance.block,
+					at: provenance.at
+				});
+			});
+		});
 
 		return merged;
 	},

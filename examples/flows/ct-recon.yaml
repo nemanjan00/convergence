@@ -16,6 +16,13 @@ entities:
   host:
     key: [name]                        # stable identity; enrichments accumulate
     # merge defaults to first-write-wins-with-provenance (monotonic => converges)
+    fields:
+      ip:                              # a typed field: materialize+link an `ip`
+        links: ip                      #   entity keyed by address, with an edge
+        as: address
+        rel: resolves_to
+  ip:
+    key: [address]                     # first-class ip node (built from host.ip)
 
 sources:
   - id: ct
@@ -104,3 +111,13 @@ blocks:
     inputs:
       name: "{{ host.name }}"
     merge_into: host
+
+  # ASN of each ip node (ip entities are auto-materialized from host.ip).
+  - id: ip-asn
+    uses: ip.asn
+    for_each: ip
+    when:
+      ip.asn: { $exists: false }
+    inputs:
+      address: "{{ ip.address }}"
+    merge_into: ip

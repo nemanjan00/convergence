@@ -72,6 +72,20 @@ describe("loader", () => {
 		]));
 	});
 
+	it("rejects a field that links to an undeclared entity", () => {
+		const errors = loader.validate({
+			apiVersion: "v0",
+			metadata: { name: "x" },
+			entities: { host: { key: ["name"], fields: { ip: { links: "ip" } } } },
+			sources: [{ id: "s", block: "b", emits: "host" }],
+			blocks: []
+		});
+
+		expect(errors).toEqual(expect.arrayContaining([
+			expect.stringMatching(/links to undeclared entity 'ip'/)
+		]));
+	});
+
 	it("rejects a duplicate id", () => {
 		const errors = loader.validate({
 			apiVersion: "v0",
