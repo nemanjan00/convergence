@@ -256,79 +256,147 @@ const explorer = (data, ui) => {
 			{ label: "Go to Playbooks", onClick: () => { ui.view = "playbooks"; } }));
 	}
 
-	const typeTabs = el("div", { class: "chips" }, types.map((type) => {
-		return el("button", {
-			class: () => (ui.type === type ? "chip active" : "chip"),
-			onclick: () => { ui.type = type; }
-		}, type + " (" + data.entities[type].length + ")");
-	}));
+	// Index entities + build the lineage adjacency (parent -> child edges).
+	const idOf = (type, key) => { return type + "|" + key; };
+	const byId = {};
+	types.forEach((type) => {
+		(data.entities[type] || []).forEach((entity) => { byId[idOf(type, entity.key)] = { type: type, key: entity.key, entity: entity }; });
+	});
+
+	const children = {};
+	const parents = {};
+	(data.edges || []).forEach((edge) => {
+		const from = idOf(edge.from.type, edge.from.key);
+		const to = idOf(edge.to.type, edge.to.key);
+		(children[from] = children[from] || []).push({ id: to, rel: edge.rel });
+		(parents[to] = parents[to] || []).push({ id: from, rel: edge.rel });
+	});
+
+	const typeOf = (id) => { return byId[id] ? byId[id].type : id.split("|")[0]; };
+	const labelOf = (id) => { return byId[id] ? shortLabel(byId[id].key) : id.split("|").slice(1).join("|"); };
+	const select = (id) => { ui.selected = id; ui.frame = ui.frame + 1; };
+	const formatVal = (v) => { return String(JSON.stringify(v)).replace(/^"|"$/g, ""); };
 
 	const search = el("input", {
-		class: "search",
-		type: "search",
-		placeholder: "filter rows…",
+		class: "search", type: "search", placeholder: "filter entities…",
 		oninput: (e) => { ui.query = e.target.value; }
 	});
 
-	const count = el("div", { class: "count" }, () => {
-		const total = (data.entities[ui.type] || []).length;
-		const shown = (data.entities[ui.type] || []).filter((row) => { return matchesQuery(row, ui.query); }).length;
+	const modeToggle = el("div", { class: "seg" }, ["tree", "table"].map((mode) => {
+		return el("button", {
+			class: () => (ui.exploreMode === mode ? "seg-btn active" : "seg-btn"),
+			onclick: () => { ui.exploreMode = mode; ui.frame = ui.frame + 1; }
+		}, mode);
+	}));
 
-		return shown === total ? (total + " " + ui.type) : (shown + " of " + total + " " + ui.type);
+	// --- TREE: drill parent -> child along the lineage (certs -> hosts -> ips
+	// -> orgs, domains -> emails, …). Cycle-guarded via the ancestor path. ---
+	const treeNode = (id, rel, path) => {
+		const kids = children[id] || [];
+		const cyclic = path.has(id);
+		const expandable = kids.length > 0 && !cyclic;
+		const isOpen = ui.expanded[id];
+
+		const row = el("div", {
+			class: () => "tnode" + (ui.selected === id ? " sel" : ""),
+			style: "padding-left:" + (path.size * 16) + "px"
+		},
+		expandable
+			? el("button", { class: "caret", onclick: (e) => { e.stopPropagation(); ui.expanded[id] = !ui.expanded[id]; ui.frame = ui.frame + 1; } }, isOpen ? "▾" : "▸")
+			: el("span", { class: "caret" }, "·"),
+		rel ? el("span", { class: "trel" }, rel + "→") : el("span", {}),
+		el("span", { class: "tbadge " + typeOf(id) }, typeOf(id)),
+		el("span", { class: "tlabel", onclick: () => { select(id); } }, labelOf(id)),
+		cyclic ? el("span", { class: "muted", title: "already shown above" }, "↻") : el("span", {}));
+
+		if (!isOpen || cyclic) { return row; }
+
+		const childPath = new Set(path);
+		childPath.add(id);
+
+		return el("div", {}, [row].concat(kids.map((k) => { return treeNode(k.id, k.rel, childPath); })));
+	};
+
+	const tree = el("div", { class: "tree scroll" }, () => {
+		ui.frame;
+		const roots = Object.keys(byId)
+			.filter((id) => { return !parents[id]; })
+			.filter((id) => { return matchesQuery(byId[id].entity, ui.query); })
+			.sort();
+
+		if (roots.length === 0) { return el("p", { class: "muted" }, "no root entities match"); }
+
+		return el("div", {}, roots.map((id) => { return treeNode(id, null, new Set()); }));
 	});
 
-	const tableWrap = el("div", { class: "scroll" },
-		el("table", {},
+	// --- TABLE: dense per-type view (existing). ---
+	const typeTabs = el("div", { class: "chips" }, types.map((type) => {
+		return el("button", { class: () => (ui.type === type ? "chip active" : "chip"), onclick: () => { ui.type = type; ui.frame = ui.frame + 1; } },
+			type + " (" + data.entities[type].length + ")");
+	}));
+
+	const table = el("div", {},
+		typeTabs,
+		el("div", { class: "scroll" }, el("table", {},
 			el("thead", {}, () => {
 				const cols = columnsFor(data.entities[ui.type] || []);
-
-				return el("tr", {}, [el("th", {}, "key")].concat(cols.map((c) => {
-					return el("th", {}, c);
-				})));
+				return el("tr", {}, [el("th", {}, "key")].concat(cols.map((c) => { return el("th", {}, c); })));
 			}),
 			el("tbody", {}, list(
-				() => {
-					return (data.entities[ui.type] || []).filter((r) => matchesQuery(r, ui.query));
-				},
+				() => { return (data.entities[ui.type] || []).filter((r) => matchesQuery(r, ui.query)); },
 				(row) => ui.type + "|" + row.key,
 				(row) => {
 					const cols = columnsFor(data.entities[ui.type] || []);
-
 					return el("tr", {
-						class: () => (ui.selected === row.key ? "row sel" : "row"),
-						onclick: () => { ui.selected = row.key; }
-					}, [el("td", { class: "key", "data-label": "key" }, row.key)].concat(cols.map((c) => {
-						return cell(row.fields[c], c);
-					})));
+						class: () => (ui.selected === idOf(ui.type, row.key) ? "row sel" : "row"),
+						onclick: () => { select(idOf(ui.type, row.key)); }
+					}, [el("td", { class: "key", "data-label": "key" }, row.key)].concat(cols.map((c) => { return cell(row.fields[c], c); })));
 				}
 			))
-		)
-	);
+		)));
 
-	const lineage = el("div", { class: "lineage" }, () => {
-		if (!ui.selected) {
-			return el("p", { class: "muted" }, "select a row to see its lineage");
+	// --- DETAIL: the selected entity's fields + provenance + navigable relations.
+	const relLink = (edge) => {
+		return el("div", { class: "rellink", onclick: () => { select(edge.id); } },
+			el("span", { class: "trel" }, edge.rel + "→"),
+			el("span", { class: "tbadge " + typeOf(edge.id) }, typeOf(edge.id)),
+			el("span", { class: "tlabel" }, labelOf(edge.id)));
+	};
+
+	const detail = el("div", { class: "detail" }, () => {
+		ui.frame;
+
+		if (!ui.selected || !byId[ui.selected]) {
+			return el("p", { class: "muted" }, "select an entity to inspect its fields, provenance and relations");
 		}
 
-		const related = data.edges.filter((edge) => {
-			return edge.from.key === ui.selected || edge.to.key === ui.selected;
+		const node = byId[ui.selected];
+		const entity = node.entity;
+		const parts = [ el("div", { class: "d-head" },
+			el("span", { class: "tbadge " + node.type }, node.type),
+			el("span", { class: "d-key" }, node.key)) ];
+
+		Object.keys(entity.fields).forEach((name) => {
+			const f = entity.fields[name];
+			parts.push(el("div", { class: "dfield" },
+				el("span", { class: "dk" }, name),
+				el("span", { class: "dv" }, formatVal(f.value)),
+				el("span", { class: "prov" }, f.block)));
 		});
 
-		if (related.length === 0) {
-			return el("p", { class: "muted" }, "no edges for " + ui.selected);
-		}
+		const ps = parents[ui.selected] || [];
+		const cs = children[ui.selected] || [];
+		if (ps.length > 0) { parts.push(el("h3", {}, "parent of ← discovered from")); ps.forEach((p) => { parts.push(relLink(p)); }); }
+		if (cs.length > 0) { parts.push(el("h3", {}, "led to →")); cs.forEach((c) => { parts.push(relLink(c)); }); }
 
-		return el("ul", {}, related.map((edge) => {
-			return el("li", {},
-				el("code", {}, edge.from.type + " " + edge.from.key),
-				el("span", { class: "rel" }, " —" + edge.rel + "→ "),
-				el("code", {}, edge.to.type + " " + edge.to.key)
-			);
-		}));
+		return el("div", {}, parts);
 	});
 
-	return el("div", { class: "panel" }, typeTabs, search, count, tableWrap,
-		el("h3", {}, "lineage"), lineage);
+	return el("div", { class: "panel" },
+		el("div", { class: "toolbar" }, modeToggle, search),
+		el("div", { class: "explorer-split" },
+			el("div", {}, when(() => ui.exploreMode, (mode) => (mode === "table" ? table : tree))),
+			detail));
 };
 
 // --- Builder graph model --------------------------------------------------
@@ -1167,6 +1235,8 @@ export const render = (root, data) => {
 		type: entityTypes.indexOf("host") !== -1 ? "host" : entityTypes[0],
 		query: "",
 		selected: null,
+		exploreMode: "tree",
+		expanded: {},
 		block: null,
 		graph: graph,
 		pos: builderLayout(graph, narrow),

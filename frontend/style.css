@@ -133,6 +133,50 @@ header .sub { font-size: 12px; color: var(--dim); margin-left: 2px; }
 
 .count { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
 
+.toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
+
+/* segmented toggle (tree / table) */
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg-btn { appearance: none; background: transparent; border: 0; color: var(--dim); font: inherit; font-size: 12px; padding: 6px 14px; cursor: pointer; }
+.seg-btn.active { background: var(--accent-weak); color: var(--text); }
+
+/* explorer: tree + detail side by side */
+.explorer-split { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+.tree { max-height: 68vh; overflow: auto; padding: 8px; }
+.tnode { display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: 7px; cursor: default; white-space: nowrap; }
+.tnode:hover { background: var(--surface-2); }
+.tnode.sel { background: var(--accent-weak); }
+.caret { width: 15px; text-align: center; color: var(--dim); background: none; border: 0; font: inherit; cursor: pointer; padding: 0; }
+.tbadge {
+	font-family: var(--mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.05em;
+	padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border); color: var(--dim);
+	border-left-width: 3px;
+}
+.tbadge.host { border-left-color: var(--k-entity); }
+.tbadge.ip { border-left-color: var(--k-source); }
+.tbadge.cert { border-left-color: #c084fc; }
+.tbadge.email { border-left-color: #ff6d5a; }
+.tbadge.domain { border-left-color: #4ec9a5; }
+.tbadge.org { border-left-color: #f0b429; }
+.tlabel { font-family: var(--mono); font-size: 12.5px; color: var(--text); cursor: pointer; }
+.tlabel:hover { color: var(--accent); }
+.trel { font-family: var(--mono); font-size: 10px; color: var(--accent); opacity: 0.8; }
+
+.detail { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 16px; position: sticky; top: 14px; }
+.detail .d-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.detail .d-key { font-family: var(--mono); font-size: 12.5px; color: var(--text); word-break: break-all; }
+.dfield { display: flex; flex-direction: column; gap: 2px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.dfield:last-of-type { border-bottom: 0; }
+.dfield .dk { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--dim); }
+.dfield .dv { font-family: var(--mono); font-size: 12.5px; color: var(--text); word-break: break-word; }
+.rellink { display: inline-flex; align-items: center; gap: 6px; padding: 4px 0; cursor: pointer; }
+.rellink:hover .tlabel { color: var(--accent); }
+
+@media (max-width: 860px) {
+	.explorer-split { grid-template-columns: 1fr; }
+	.detail { position: static; }
+}
+
 /* modal (deliberate confirmation) */
 .modal-backdrop {
 	position: fixed; inset: 0; background: rgba(6, 8, 12, 0.62);

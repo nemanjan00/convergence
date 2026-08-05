@@ -124,9 +124,22 @@ if (new Set(boxes.map((b) => b.left)).size < 2) { failures.push("builder: nodes 
 click(navByText("Graph"));
 if (q(".gnode.ent").length < 1) { failures.push("graph: no entity nodes"); }
 
-// --- Entities (explorer) ---
+// --- Entities (explorer) — tree by default, drill + detail, then table toggle ---
 click(navByText("Entities"));
-if (q("tbody tr").length < 1) { failures.push("explorer: no rows"); }
+if (q(".tnode").length < 1) { failures.push("explorer tree: no root nodes"); }
+// expand a root to reveal children
+const caret = q(".tnode .caret").find((c) => c.textContent === "▸");
+if (caret) {
+	const before = q(".tnode").length;
+	click(caret);
+	if (q(".tnode").length <= before) { failures.push("explorer tree: expanding a root revealed no children"); }
+}
+// select a node -> detail shows its fields
+click(q(".tnode .tlabel")[0]);
+if (q(".detail .dfield").length < 1) { failures.push("explorer: selecting a node showed no fields"); }
+// table toggle
+const tableSeg = q(".seg-btn").find((b) => b.textContent === "table");
+if (tableSeg) { click(tableSeg); if (q("tbody tr").length < 1) { failures.push("explorer table: no rows"); } }
 
 // --- Executions (scoped to this playbook) ---
 click(navByText("Executions"));
