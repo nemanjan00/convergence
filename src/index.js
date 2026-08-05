@@ -92,6 +92,10 @@ hydrate.then(() => {
 		cron.schedule(schedule, tick);
 	}
 
+	// Run active playbooks once on boot so a restart repopulates entities/
+	// executions immediately instead of waiting for the first cron tick.
+	setTimeout(tick, 1500);
+
 	// Graceful shutdown (docker stop / Ctrl-C): stop accepting connections and
 	// close the Mongo client so nothing dangles.
 	const shutdown = () => {

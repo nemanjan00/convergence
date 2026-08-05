@@ -971,14 +971,37 @@ const nameFromYaml = (yaml) => {
 // live recon on a schedule, so it confirms via an in-app modal first.
 const pbSetState = (ui, book, target) => {
 	const apply = () => {
-		if (ui.served) {
-			ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: target })
-				.then(() => { return ui.refresh({ kind: "ok", msg: target + " · " + book.name }); });
+		if (!ui.served) {
+			book.state = target;
+			ui.frame = ui.frame + 1;
 			return;
 		}
 
-		book.state = target;
-		ui.frame = ui.frame + 1;
+		// Activating RUNS the playbook immediately (with feedback) instead of
+		// waiting up to a full scheduler interval — that's what "active" should feel
+		// like. Pausing/drafting is just a state write.
+		if (target === "active") {
+			ui.running = book.id;
+			ui.frame = ui.frame + 1;
+
+			ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: "active" })
+				.then(() => { return ui.api("POST", "/api/playbooks/" + book.id + "/run"); })
+				.then((res) => {
+					const total = (res && res.entities)
+						? Object.keys(res.entities).reduce((sum, type) => { return sum + res.entities[type].length; }, 0)
+						: 0;
+					return ui.refresh({ kind: "ok", msg: "Activated + ran " + book.name + " — " + total + " entities" });
+				})
+				.catch((error) => {
+					ui.running = null;
+					ui.toast = { kind: "err", msg: "Activate/run failed: " + error.message };
+					ui.frame = ui.frame + 1;
+				});
+			return;
+		}
+
+		ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: target })
+			.then(() => { return ui.refresh({ kind: "ok", msg: target + " · " + book.name }); });
 	};
 
 	if (target === "active") {
