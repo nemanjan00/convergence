@@ -5,7 +5,7 @@
 > never runs the conveyor belt.
 
 ![status: alpha](https://img.shields.io/badge/status-alpha-orange)
-![tests: 279 passing](https://img.shields.io/badge/tests-279%20passing-brightgreen)
+![tests: 285 passing](https://img.shields.io/badge/tests-285%20passing-brightgreen)
 ![blocks: 67](https://img.shields.io/badge/blocks-67-4ec9a5)
 ![model: convergence fixpoint](https://img.shields.io/badge/model-convergence%20fixpoint-8a2be2)
 ![Node.js · CommonJS](https://img.shields.io/badge/Node.js-CommonJS-339933?logo=node.js&logoColor=white)
@@ -14,17 +14,15 @@
 ![license: all rights reserved](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)
 
 > **Project status — honest version.** This is an **alpha / reference
-> implementation**, not a product. It runs end-to-end on live network with 279
-> passing tests and a real served app (REST API + UI + scheduler), but: it's a
-> **single node with an in-memory working set** (Mongo persists/hydrates it, but
-> it's not a Mongo-native store yet); there is **no auth** on the API; the UI's
-> execution **re-run** is not wired yet (engine hook pending); the engine can't
-> yet reference an entity's **parent/ancestor** entities in guards/inputs; and
-> block I/O + the flow spec **may still change**. Use it for research and
-> self-hosted recon, not production. Nothing here needs an API key. See
-> [Status](#status) for the real-vs-pending breakdown.
-
-The name is the execution model: enrichment blocks re-evaluate against each
+> implementation**, not a product. It runs end-to-end on live network with 285
+> passing tests and a real served app (REST API + UI + scheduler); the UI is
+> fully wired to the API (playbook lifecycle, execution re-run, imports), and the
+> engine supports parent references. But: it's a **single node with an in-memory
+> working set** (Mongo persists/hydrates it, but it's not a Mongo-native store
+> yet); there is **no auth** on the API; and block I/O + the flow spec **may
+> still change**. Use it for research and self-hosted recon, not production.
+> Nothing here needs an API key. See [Status](#status) for the real-vs-pending
+> breakdown.
 
 The name is the execution model: enrichment blocks re-evaluate against each
 entity's current **state** and re-run until nothing changes — so a fact ("port
@@ -127,8 +125,11 @@ a **served app** (REST API + UI + active-playbook scheduler), the MCP interface
 (an HTTP client of that API), the qrp frontend, an execution journal, playbook
 lifecycle, and Mongo persistence/hydrate.
 
-Pending (see the status note up top): UI execution **re-run** wiring, engine
-**parent references**, a Mongo-native store, and auth.
+Recently landed: the served app, the UI fully wired to the API (playbook
+lifecycle, execution **re-run** / re-run-all-failed, sample + manual import), and
+engine **parent references** (a derived entity reads its ancestors' fields in
+`inputs`/`when`/`filter`). Pending: a Mongo-native store (query at scale) and
+**auth** on the API.
 
 ```bash
 yarn install
@@ -138,7 +139,7 @@ yarn export    # run a flow and serialize entities+provenance+edges+executions
 yarn mcp       # AI-facing MCP server (stdio)
 yarn monitor   # re-run a flow on a cron (MONITOR_CRON); accumulate + alert
 yarn playbooks # run every ACTIVE playbook on a cron (play/pause runtime)
-yarn test      # 279 tests
+yarn test      # 285 tests
 yarn lint
 yarn frontend:build   # esbuild-bundle the qrp UI to a self-contained HTML
 ```

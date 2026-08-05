@@ -189,6 +189,67 @@ describe("convergence engine", () => {
 		});
 	});
 
+	it("parent references: a derived entity can read its ancestor's fields", () => {
+		// cert --has_san--> host (derivation). When enriching the host, the block
+		// should see the cert via ctx.cert (parent reference).
+		const engine = engineFactory.create();
+		engine.registerBlock("explode", () => { return Promise.resolve([{ name: "a.example.com" }]); });
+
+		let seenParentIssuer = null;
+		engine.registerBlock("tag", (input) => {
+			seenParentIssuer = input.issuer;
+			return Promise.resolve({ tagged: true });
+		});
+
+		const flow = {
+			name: "parent-test",
+			entities: { cert: { key: ["id"] }, host: { key: ["name"] } },
+			source: { id: "seed", emits: "cert", pull: () => { return Promise.resolve([{ id: 1, issuer: "Let's Encrypt" }]); } },
+			blocks: [
+				{ id: "explode", uses: "explode", forEach: "cert", inputs: () => ({}), mergeInto: "host", relation: "has_san" },
+				// reads the PARENT cert's issuer via the templated input:
+				{ id: "tag", uses: "tag", forEach: "host", inputs: (ctx) => ({ issuer: ctx.cert && ctx.cert.issuer }), mergeInto: "host" }
+			]
+		};
+
+		return engine.run(flow).then(() => {
+			expect(seenParentIssuer).toBe("Let's Encrypt");
+			expect(store.get("host", "name=\"a.example.com\"").fields.tagged.value).toBe(true);
+		});
+	});
+
+	it("runBlockById re-runs one block against one existing entity (journaled)", () => {
+		const engine = engineFactory.create();
+		engine.registerBlock("dns.resolve", constantBlock({ ip: "1.2.3.4" }));
+		engine.registerBlock("port.scan", constantBlock({ open_ports: [80] }));
+		engine.registerBlock("http.title", constantBlock({ title: "X" }));
+
+		const flow = buildFlow();
+
+		return engine.run(flow).then(() => {
+			journal._reset();
+
+			// Re-run just `resolve` against one host — no full sweep.
+			return engine.runBlockById(flow, "resolve", "host", "name=\"a.example.com\"").then((result) => {
+				expect(result.ran).toBe(true);
+				const entries = journal.all();
+				expect(entries.length).toBe(1);
+				expect(entries[0].block).toBe("resolve");
+			});
+		});
+	});
+
+	it("runBlockById returns ran:false for an unknown block or entity", () => {
+		const engine = engineFactory.create();
+		register(engine);
+
+		return engine.run(buildFlow()).then(() => {
+			return engine.runBlockById(buildFlow(), "nope", "host", "name=\"a.example.com\"").then((result) => {
+				expect(result.ran).toBe(false);
+			});
+		});
+	});
+
 	it("terminates (reaches a fixpoint) and is idempotent on re-run", () => {
 		const engine = engineFactory.create();
 		register(engine);

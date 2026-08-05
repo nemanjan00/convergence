@@ -691,7 +691,15 @@ const executionsView = (data, ui) => {
 		return el("button", {
 			class: "rerun",
 			title: "re-run every target whose final state is an error",
-			onclick: () => { ui.exStatus = "failed"; ui.exRerunAll = true; }
+			onclick: () => {
+				if (ui.served) {
+					ui.api("POST", "/api/executions/rerun-failed").then(ui.refresh);
+					return;
+				}
+
+				ui.exStatus = "failed";
+				ui.exRerunAll = true;
+			}
 		}, "⟳ re-run all failed (" + failed.length + ")");
 	};
 
@@ -748,16 +756,24 @@ const executionsView = (data, ui) => {
 			entry.block + " · " + (entry.uses || "") + " · " +
 			(entry.entity ? entry.entity.type + " " + entry.entity.key : "")));
 
-		// Re-run is a control the served app will honour (replay this block on
-		// this entity). Disabled visual until the live backend is wired.
+		// Re-run: replay this block against this entity. Served -> hits the API
+		// and reloads; static artifact -> a note (no backend to run against).
 		blocks.push(el("button", {
 			class: "rerun",
-			title: "replay this block against this entity (needs the live backend)",
-			onclick: () => { ui.exRerun = entry.id; }
+			title: "replay this block against this entity",
+			onclick: () => {
+				if (ui.served) {
+					ui.api("POST", "/api/executions/" + entry.id + "/rerun").then(ui.refresh);
+					return;
+				}
+
+				ui.exRerun = entry.id;
+				ui.frame = ui.frame + 1;
+			}
 		}, "⟳ re-run"));
 
-		if (ui.exRerun === entry.id) {
-			blocks.push(el("p", { class: "muted" }, "re-run queued — wired when the served backend lands"));
+		if (!ui.served && ui.exRerun === entry.id) {
+			blocks.push(el("p", { class: "muted" }, "re-run needs the served app (yarn web) — this is a static export"));
 		}
 
 		if (entry.error) {
@@ -774,12 +790,12 @@ const executionsView = (data, ui) => {
 	});
 
 	const banner = () => {
-		if (!ui.exRerunAll || failed.length === 0) {
+		if (ui.served || !ui.exRerunAll || failed.length === 0) {
 			return el("span", {});
 		}
 
 		return el("p", { class: "muted" },
-			"queued re-run of " + failed.length + " failed target(s) — executed when the served backend lands");
+			failed.length + " failed target(s) — run the served app (yarn web) to re-run them");
 	};
 
 	return el("div", { class: "panel" },
@@ -800,8 +816,14 @@ const nameFromYaml = (yaml) => {
 
 const playbooksView = (data, ui) => {
 	const cycle = (book) => {
-		const at = PB_STATES.indexOf(book.state);
-		book.state = PB_STATES[(at + 1) % PB_STATES.length];
+		const next = PB_STATES[(PB_STATES.indexOf(book.state) + 1) % PB_STATES.length];
+
+		if (ui.served) {
+			ui.api("POST", "/api/playbooks/" + book.id + "/state", { state: next }).then(ui.refresh);
+			return;
+		}
+
+		book.state = next;
 		ui.frame = ui.frame + 1;
 	};
 
@@ -884,6 +906,12 @@ const playbooksView = (data, ui) => {
 			name = nameFromYaml(text);
 		}
 
+		if (ui.served) {
+			ui.api("POST", "/api/playbooks/import", { name: name, schedule: schedule, yaml: yaml })
+				.then(() => { ui.pbImportText = ""; return ui.refresh(); });
+			return;
+		}
+
 		ui.playbooks.push({
 			id: "pb-" + (ui.playbooks.length + 1),
 			name: name, state: "draft", schedule: schedule, valid: true, yaml: yaml, last_run_at: null
@@ -897,6 +925,11 @@ const playbooksView = (data, ui) => {
 		return el("button", {
 			class: "chip", title: sample.description || sample.name,
 			onclick: () => {
+				if (ui.served) {
+					ui.api("POST", "/api/playbooks/import", { name: sample.name, yaml: sample.yaml }).then(ui.refresh);
+					return;
+				}
+
 				ui.playbooks.push({
 					id: "pb-" + (ui.playbooks.length + 1), name: sample.name, state: "draft",
 					schedule: null, valid: true, yaml: sample.yaml, last_run_at: null
@@ -945,6 +978,7 @@ export const render = (root, data) => {
 
 	const ui = state({
 		view: "explorer",
+		served: Boolean(data.__served),
 		playbooks: seedPlaybooks,
 		pbSel: null,
 		pbExport: null,
@@ -981,6 +1015,26 @@ export const render = (root, data) => {
 			ui.frame = ui.frame + 1;
 		});
 	}
+
+	// Served-mode API bridge: call the app's REST API, then reload the whole
+	// snapshot and re-render (reflects entity/execution/playbook changes).
+	ui.api = (method, apiPath, body) => {
+		return fetch(apiPath, {
+			method: method,
+			headers: { "content-type": "application/json" },
+			body: body === undefined ? undefined : JSON.stringify(body)
+		}).then((response) => { return response.json(); });
+	};
+
+	ui.refresh = () => {
+		return fetch("/api/snapshot")
+			.then((response) => { return response.json(); })
+			.then((fresh) => {
+				fresh.__served = true;
+				root.innerHTML = "";
+				render(root, fresh);
+			});
+	};
 
 	// Dragging via POINTER events so it works with mouse AND touch. Document-
 	// level so the pointer can leave the node mid-drag.

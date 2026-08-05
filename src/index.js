@@ -44,7 +44,7 @@ const tick = () => {
 
 	return active.reduce((chain, book) => {
 		return chain.then(() => {
-			return mcp.runFlow(book.yaml)
+			return mcp.runFlow(book.yaml, { playbookId: book.id })
 				.then((result) => {
 					const counts = {};
 					Object.keys(result.entities || {}).forEach((type) => { counts[type] = result.entities[type].length; });

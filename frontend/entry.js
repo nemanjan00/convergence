@@ -8,7 +8,10 @@ if (window.__DATA__) {
 } else {
 	fetch("/api/snapshot")
 		.then((response) => { return response.json(); })
-		.then((data) => { render(document.body, data); })
+		.then((data) => {
+			data.__served = true; // enable live API actions (re-run, playbook lifecycle)
+			render(document.body, data);
+		})
 		.catch((error) => {
 			document.body.textContent = "could not load /api/snapshot — is the convergence app running? (" + error.message + ")";
 		});

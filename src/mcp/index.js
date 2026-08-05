@@ -98,6 +98,9 @@ const mcp = {
 
 		const flow = loader.load(yamlString, { sourcePull: pull });
 
+		// Tag the run with its playbook so journal entries can be re-run later.
+		if (opts.playbookId) { flow._playbook = opts.playbookId; }
+
 		return engine.run(flow).then(() => {
 			const entities = {};
 
@@ -149,6 +152,31 @@ const mcp = {
 		} catch (error) {
 			return { error: error.message };
 		}
+	},
+
+	// Re-run a single execution (the Executions "re-run"): resolve the flow from
+	// the entry's originating playbook, then re-run that block against that
+	// entity. The re-run itself is journaled (a fresh execution). Returns
+	// { ran, changed } or { error }.
+	rerunExecution: (entry) => {
+		if (!entry || !entry.playbook || !entry.entity) {
+			return Promise.resolve({ error: "execution has no playbook context to re-run from" });
+		}
+
+		const book = playbookRegistry.get(entry.playbook);
+
+		if (!book) {
+			return Promise.resolve({ error: "playbook not found: " + entry.playbook });
+		}
+
+		const engine = engineFactory.create();
+		blocks.register(engine);
+
+		const flow = loader.load(book.yaml, { sourcePull: () => { return Promise.resolve([]); } });
+		flow._playbook = book.id;
+
+		return engine.runBlockById(flow, entry.block, entry.entity.type, entry.entity.key)
+			.catch((error) => { return { ran: false, error: error.message }; });
 	},
 
 	// Export a playbook as a portable artifact (name/schedule/yaml).

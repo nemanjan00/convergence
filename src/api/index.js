@@ -107,6 +107,28 @@ const createApp = () => {
 		res.json({ executions: req.query.failed ? journal.failed() : journal.all() });
 	});
 
+	// Re-run one execution by id (resolves its playbook + block + entity).
+	app.post("/api/executions/:id/rerun", (req, res) => {
+		const entry = journal.all().find((execution) => { return execution.id === req.params.id; });
+
+		if (!entry) { return res.status(404).json({ error: "execution not found" }); }
+
+		return mcp.rerunExecution(entry).then((result) => { res.json(result); });
+	});
+
+	// Re-run every failed (final-state error) execution.
+	app.post("/api/executions/rerun-failed", (req, res) => {
+		const failed = journal.failed();
+
+		return failed.reduce((chain, entry) => {
+			return chain.then((acc) => {
+				return mcp.rerunExecution(entry).then((result) => { acc.push(result); return acc; });
+			});
+		}, Promise.resolve([])).then((results) => {
+			res.json({ reran: results.length, results: results });
+		});
+	});
+
 	// --- inbound webhook (push side of ingest) ---
 	app.post("/api/webhook", (req, res) => {
 		const webhook = sources.allMap()["source.webhook"];
@@ -160,7 +182,7 @@ const createApp = () => {
 
 		if (!book) { return res.status(404).json({ error: "not found" }); }
 
-		return mcp.runFlow(book.yaml)
+		return mcp.runFlow(book.yaml, { playbookId: book.id })
 			.then((result) => {
 				playbooks.recordRun(book.id, result.entities
 					? Object.keys(result.entities).reduce((counts, type) => {

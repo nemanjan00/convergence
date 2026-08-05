@@ -91,10 +91,37 @@ const createEngine = () => {
 			const ctx = {};
 			ctx[block.forEach] = flattenEntity(entity);
 
+			// Parent references: the entities THIS one was derived from (lineage
+			// edges pointing at it), exposed in the context so `inputs`/`when`/
+			// `filter` can read an ancestor's fields — e.g. on a host a cert
+			// produced, `{{ cert.issuer }}` / `when: { "cert.issuer": … }`. The
+			// first parent of each type wins; all are under `_parents`.
+			const parentEdges = store.edges({ toType: block.forEach, toKey: entity._identity });
+
+			if (parentEdges.length > 0) {
+				const parents = [];
+
+				parentEdges.forEach((edge) => {
+					const parent = store.get(edge.from.type, edge.from.key);
+
+					if (!parent) { return; }
+
+					const flat = flattenEntity(parent);
+					flat._type = edge.from.type;
+					flat._rel = edge.rel;
+					parents.push(flat);
+
+					if (ctx[edge.from.type] === undefined) { ctx[edge.from.type] = flat; }
+				});
+
+				if (parents.length > 0) { ctx._parents = parents; }
+			}
+
 			// Base journal fields shared by every outcome for this attempt.
 			const logBase = {
 				run: flow._runId,
 				sweep: flow._sweep,
+				playbook: flow._playbook || null,
 				block: block.id,
 				uses: block.uses,
 				for_each: block.forEach,
@@ -194,6 +221,31 @@ const createEngine = () => {
 				}, logBase));
 
 				throw error;
+			});
+		},
+
+		// Re-run ONE block against ONE existing entity (the Executions "re-run").
+		// Reuses _apply, so it journals the attempt and merges any output exactly
+		// like a normal sweep. Resolves { ran, changed } — ran=false if the block
+		// or entity is unknown. The flow's entity types are (re)defined so the
+		// store is ready even on a cold process.
+		runBlockById: (flow, blockId, entityType, entityKey) => {
+			const prepared = Object.assign({}, flow, {
+				_runId: flow._runId || uuid(),
+				_sweep: flow._sweep || 0
+			});
+
+			Object.keys(flow.entities || {}).forEach((type) => { store.define(type, flow.entities[type]); });
+
+			const block = (prepared.blocks || []).find((candidate) => { return candidate.id === blockId; });
+			const entity = store.get(entityType, entityKey);
+
+			if (!block || !entity) {
+				return Promise.resolve({ ran: false, changed: false });
+			}
+
+			return engine._apply(prepared, block, entity, {}).then((changed) => {
+				return { ran: true, changed: changed };
 			});
 		},
 
