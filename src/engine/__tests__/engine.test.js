@@ -134,6 +134,61 @@ describe("convergence engine", () => {
 		});
 	});
 
+	it("self-feeding crawler converges over a cyclic site and terminates", () => {
+		// A tiny site graph with a cycle (a<->b) and a leaf (c). The crawler emits
+		// each page's links as `crawl_links`, typed to materialize a webpage per
+		// URL — so the ENGINE walks the site. URL identity + first-write-wins must
+		// make it dedupe and STOP, not loop on the a<->b cycle.
+		const SITE = {
+			"http://s/a": ["http://s/b", "http://s/c"],
+			"http://s/b": ["http://s/a"],
+			"http://s/c": []
+		};
+
+		const engine = engineFactory.create();
+		engine.registerBlock("crawl", (input) => {
+			return Promise.resolve({ crawl_links: SITE[input.url] || [] });
+		});
+
+		const flow = {
+			name: "crawl-test",
+			entities: {
+				webpage: {
+					key: ["url"],
+					merge: "first-write-wins-with-provenance",
+					fields: { crawl_links: { links: "webpage", as: "url", rel: "links_to" } }
+				}
+			},
+			source: {
+				id: "seed",
+				emits: "webpage",
+				pull: () => { return Promise.resolve([{ url: "http://s/a" }]); }
+			},
+			blocks: [
+				{
+					id: "crawl",
+					uses: "crawl",
+					forEach: "webpage",
+					inputs: (ctx) => ({ url: ctx.webpage.url }),
+					mergeInto: "webpage"
+				}
+			]
+		};
+
+		// If it didn't dedupe, run() would throw "did not converge"; reaching here
+		// with all three pages proves the self-feed terminates.
+		return engine.run(flow).then(() => {
+			const urls = store.all("webpage").map((page) => { return page._identity; }).sort();
+
+			expect(urls).toEqual([
+				"url=\"http://s/a\"", "url=\"http://s/b\"", "url=\"http://s/c\""
+			]);
+
+			// a -> b, a -> c, b -> a : three lineage edges, no runaway.
+			expect(store.edges({ fromType: "webpage" })).toHaveLength(3);
+		});
+	});
+
 	it("terminates (reaches a fixpoint) and is idempotent on re-run", () => {
 		const engine = engineFactory.create();
 		register(engine);

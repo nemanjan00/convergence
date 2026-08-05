@@ -68,7 +68,16 @@ yarn test   # jest
 yarn lint   # eslint (flat config)
 ```
 
+## Block/source catalog
+
+`docs/BLOCKS.md` is the human-facing catalog of every block and source (grouped,
+with input/output + scenarios). **Adding a block or source means adding its row
+there** — the registry (`src/blocks`, `src/sources`) stays the machine source of
+truth (MCP `list_blocks` + the builder palette derive from it), but the doc must
+be kept in sync by hand.
+
 ## Cleanup time checklist
 
-`/implement-js` · update `README.md` · update this file · fill missing JSDoc ·
-check tests · check linter.
+`/implement-js` · update `README.md` · update `docs/BLOCKS.md` (any new
+blocks/sources) · update this file · fill missing JSDoc · check tests · check
+linter.

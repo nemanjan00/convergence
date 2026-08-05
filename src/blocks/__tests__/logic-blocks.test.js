@@ -56,6 +56,47 @@ describe("logic blocks", () => {
 		});
 	});
 
+	describe("decode", () => {
+		it("auto-detects base64", () => {
+			return map["decode"].handler({ value: "aHR0cHM6Ly9ldmlsLmNvbQ==" }).then((fields) => {
+				expect(fields.decoded).toBe("https://evil.com");
+				expect(fields.decoded_as).toBe("base64");
+			});
+		});
+
+		it("decodes hex and url when told", () => {
+			return map["decode"].handler({ value: "68656c6c6f", encoding: "hex" }).then((hex) => {
+				expect(hex.decoded).toBe("hello");
+
+				return map["decode"].handler({ value: "a%20b%2Fc", encoding: "url" }).then((url) => {
+					expect(url.decoded).toBe("a b/c");
+				});
+			});
+		});
+	});
+
+	describe("refang", () => {
+		it("restores a defanged IOC", () => {
+			return map["refang"].handler({ value: "hxxps://bad[.]example[.]com/x" }).then((fields) => {
+				expect(fields.refanged).toBe("https://bad.example.com/x");
+			});
+		});
+
+		it("defangs when asked", () => {
+			return map["refang"].handler({ value: "http://a.com", mode: "defang" }).then((fields) => {
+				expect(fields.defanged).toBe("hxxp[:]//a[.]com");
+			});
+		});
+	});
+
+	describe("cert.parse", () => {
+		it("is tolerant of non-PEM input (real parsing covered by the live smoke test)", () => {
+			return map["cert.parse"].handler({ pem: "not a certificate" }).then((fields) => {
+				expect(fields).toEqual({});
+			});
+		});
+	});
+
 	describe("regex", () => {
 		it("field map: first match, capture group 1", () => {
 			return map["regex"].handler({
