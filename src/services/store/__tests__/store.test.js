@@ -31,13 +31,15 @@ describe("store", () => {
 		expect(merged.fields.ip.provenance.block).toBe("whois");
 	});
 
-	it("resolves conflicts by last-write-wins on provenance timestamp", () => {
-		store.upsert("host", { ip: "1.2.3.4", title: "old" },
+	it("defaults to first-write-wins (monotonic): first value sticks, version settles", () => {
+		const a = store.upsert("host", { ip: "1.2.3.4", title: "old" },
 			provenanceAt("title", "2026-08-05T10:00:00Z"));
-		store.upsert("host", { ip: "1.2.3.4", title: "new" },
+		const b = store.upsert("host", { ip: "1.2.3.4", title: "new" },
 			provenanceAt("title", "2026-08-05T11:00:00Z"));
 
-		expect(store.all("host")[0].fields.title.value).toBe("new");
+		expect(store.all("host")[0].fields.title.value).toBe("old");
+		// no real change on the second write => version does not move (converges)
+		expect(b._version).toBe(a._version);
 	});
 
 	it("keeps different ips as separate entities", () => {
@@ -46,5 +48,53 @@ describe("store", () => {
 
 		expect(store.all("host")).toHaveLength(2);
 		expect(Object.keys(store.allMap("host"))).toHaveLength(2);
+	});
+});
+
+describe("store merge strategies", () => {
+	beforeEach(() => {
+		store._reset();
+	});
+
+	it("last-write-wins updates the value on a newer write", () => {
+		store.define("host", { key: ["ip"], merge: "last-write-wins-with-provenance" });
+		store.upsert("host", { ip: "1.2.3.4", title: "old" }, provenanceAt("t", "2026-08-05T10:00:00Z"));
+		store.upsert("host", { ip: "1.2.3.4", title: "new" }, provenanceAt("t", "2026-08-05T11:00:00Z"));
+
+		expect(store.get("host", "ip=\"1.2.3.4\"").fields.title.value).toBe("new");
+	});
+
+	it("union accumulates distinct values and settles when nothing is new", () => {
+		store.define("obs", { key: ["host"], merge: "union-with-provenance" });
+		store.upsert("obs", { host: "a", ports: [80] }, provenanceAt("scan1", "2026-08-05T10:00:00Z"));
+		store.upsert("obs", { host: "a", ports: [443] }, provenanceAt("scan2", "2026-08-05T10:05:00Z"));
+		const third = store.upsert("obs", { host: "a", ports: [80] }, provenanceAt("scan3", "2026-08-05T10:10:00Z"));
+
+		expect(store.get("obs", "host=\"a\"").fields.ports.value.sort()).toEqual([443, 80]);
+		// re-adding an existing value is a no-op => version stops moving
+		expect(third._version).toBe(2);
+	});
+});
+
+describe("store edges", () => {
+	beforeEach(() => {
+		store._reset();
+	});
+
+	it("records and queries deduped lineage edges", () => {
+		const edge = {
+			from: { type: "cert", key: "id=1" },
+			rel: "has_san",
+			to: { type: "host", key: "name=\"a.com\"" },
+			via: "fanout",
+			at: "2026-08-05T10:00:00Z"
+		};
+
+		store.addEdge(edge);
+		store.addEdge(edge); // duplicate ignored
+
+		expect(store.edges()).toHaveLength(1);
+		expect(store.edges({ fromType: "cert", fromKey: "id=1" })).toHaveLength(1);
+		expect(store.edges({ toKey: "name=\"nope\"" })).toHaveLength(0);
 	});
 });

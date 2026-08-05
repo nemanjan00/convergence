@@ -15,12 +15,57 @@ const valuesEqual = (a, b) => {
 	return JSON.stringify(a) === JSON.stringify(b);
 };
 
-// How merge conflicts resolve when two blocks write the same field.
+const asArray = (value) => {
+	return Array.isArray(value) ? value : [value];
+};
+
+// A merge strategy returns the SAME field object on a no-op (so the entity
+// version does not move and the fixpoint terminates), or a new field object on
+// a real change. See docs/DATA_MODEL.md.
 const MERGE_STRATEGIES = {
-	// Later provenance timestamp wins on a genuine value change. A write that
-	// repeats the existing value is a no-op that PRESERVES the original
-	// provenance — the block that first established a fact keeps the credit
-	// (this is what stops identity re-seeding from stealing provenance).
+	// Monotonic (DEFAULT). First value sticks; later writes are ignored. Scalars
+	// stay scalars. Convergence is guaranteed (a field, once set, never moves).
+	"first-write-wins-with-provenance": (existing, incoming) => {
+		if (!existing) {
+			return incoming;
+		}
+
+		return existing;
+	},
+
+	// Monotonic. Field is a set; new distinct values are appended. For fields
+	// that accumulate (observed ports, resolved ips). Grows monotonically, so it
+	// terminates.
+	"union-with-provenance": (existing, incoming) => {
+		const incomingValues = asArray(incoming.value);
+
+		if (!existing) {
+			return { value: incomingValues, provenance: incoming.provenance };
+		}
+
+		const current = asArray(existing.value);
+		const merged = current.slice();
+
+		incomingValues.forEach((value) => {
+			const present = merged.some((have) => {
+				return valuesEqual(have, value);
+			});
+
+			if (!present) {
+				merged.push(value);
+			}
+		});
+
+		if (merged.length === current.length) {
+			return existing; // nothing new — no-op
+		}
+
+		return { value: merged, provenance: existing.provenance };
+	},
+
+	// NON-monotonic (available, but flagged). Newer timestamp wins on a real
+	// change; can oscillate if two blocks fight over one field. MAX_SWEEPS in the
+	// engine is the only backstop.
 	"last-write-wins-with-provenance": (existing, incoming) => {
 		if (!existing) {
 			return incoming;
@@ -38,6 +83,8 @@ const MERGE_STRATEGIES = {
 	}
 };
 
+const DEFAULT_STRATEGY = "first-write-wins-with-provenance";
+
 // Compute an entity's identity key from its key fields (e.g. ["ip"]).
 const identityOf = (keyFields, fields) => {
 	return keyFields
@@ -51,14 +98,19 @@ const store = {
 	// entityType -> identity -> { fields: {name: {value, provenance}}, ... }
 	_collections: {},
 
+	// Lineage edges between entities (parent --rel--> child). First-class, kept
+	// separate from field provenance. See docs/DATA_MODEL.md.
+	_edges: [],
+
 	// Register an entity type with its identity key and merge strategy. Mirrors
-	// the `entities:` block of a flow YAML.
+	// the `entities:` block of a flow YAML. Defaults to the monotonic
+	// first-write-wins strategy so convergence is guaranteed.
 	define: (entityType, options) => {
 		const opts = options || {};
 
 		store._collections[entityType] = {
 			keyFields: opts.key || ["id"],
-			strategy: opts.merge || "last-write-wins-with-provenance",
+			strategy: opts.merge || DEFAULT_STRATEGY,
 			byIdentity: {}
 		};
 
@@ -153,9 +205,53 @@ const store = {
 		return map;
 	},
 
+	// Record a lineage edge parent --rel--> child (deduped). Called by the engine
+	// on every derivation.
+	addEdge: (edge) => {
+		const exists = store._edges.some((have) => {
+			return have.from.type === edge.from.type &&
+				have.from.key === edge.from.key &&
+				have.rel === edge.rel &&
+				have.to.type === edge.to.type &&
+				have.to.key === edge.to.key;
+		});
+
+		if (!exists) {
+			store._edges.push(edge);
+		}
+
+		return store;
+	},
+
+	// All edges (optionally filtered by from/to type+key).
+	edges: (filter) => {
+		const f = filter || {};
+
+		return store._edges.filter((edge) => {
+			if (f.fromType && edge.from.type !== f.fromType) {
+				return false;
+			}
+
+			if (f.fromKey && edge.from.key !== f.fromKey) {
+				return false;
+			}
+
+			if (f.toType && edge.to.type !== f.toType) {
+				return false;
+			}
+
+			if (f.toKey && edge.to.key !== f.toKey) {
+				return false;
+			}
+
+			return true;
+		});
+	},
+
 	// Test/demo helper: forget everything.
 	_reset: () => {
 		store._collections = {};
+		store._edges = [];
 
 		return store;
 	}

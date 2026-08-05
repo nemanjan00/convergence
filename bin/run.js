@@ -65,6 +65,24 @@ engine.run(flow)
 			console.log("");
 		});
 
+		// Lineage: the entity graph produced by derivations (fan-out etc.).
+		const edges = store.edges();
+
+		if (edges.length > 0) {
+			console.log("Lineage edges (" + edges.length + "):");
+
+			edges.forEach((edge) => {
+				console.log(
+					"  " + edge.from.type + " " + edge.from.key +
+					"  --" + edge.rel + "-->  " +
+					edge.to.type + " " + edge.to.key +
+					"   (via " + edge.via + ")"
+				);
+			});
+
+			console.log("");
+		}
+
 		// queue-promised keeps worker loops alive; a one-shot entrypoint exits.
 		process.exit(0);
 	})

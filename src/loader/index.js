@@ -160,6 +160,10 @@ const loader = {
 				errors.push("block '" + block.id + "' when must be a query object");
 			}
 
+			if (block.relation !== undefined && typeof block.relation !== "string") {
+				errors.push("block '" + block.id + "' relation must be a string");
+			}
+
 			// Template paths must be syntactically valid.
 			if (block.inputs) {
 				try {
@@ -198,6 +202,8 @@ const loader = {
 				when: block.when,
 				inputs: template.compileInputs(block.inputs || {}),
 				mergeInto: block.merge_into,
+				// Lineage edge label for a derivation (merge_into != for_each).
+				relation: block.relation,
 				rate: block.rate,
 				trace: []
 			};

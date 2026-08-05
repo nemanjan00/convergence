@@ -15,6 +15,13 @@ describe("fanout block", () => {
 		});
 	});
 
+	it("copies carry fields onto every child", () => {
+		return fanout.handler({ items: ["a.com"], as: "name", carry: { first_seen: "2026" } })
+			.then((out) => {
+				expect(out).toEqual([{ first_seen: "2026", name: "a.com" }]);
+			});
+	});
+
 	it("fans one cert into many host entities through the engine", () => {
 		store._reset();
 		const engine = engineFactory.create();
@@ -39,7 +46,8 @@ describe("fanout block", () => {
 					uses: "fanout",
 					forEach: "cert",
 					inputs: (ctx) => ({ items: ctx.cert.san, as: "name" }),
-					mergeInto: "host"
+					mergeInto: "host",
+					relation: "has_san"
 				}
 			]
 		};
@@ -51,6 +59,12 @@ describe("fanout block", () => {
 
 			expect(hosts).toEqual(["a.com", "b.com", "c.com"]);
 			expect(store.all("host")[0].fields.name.provenance.block).toBe("explode");
+
+			// The derivation recorded one lineage edge cert --has_san--> host each.
+			const edges = store.edges({ fromType: "cert", fromKey: "id=1" });
+			expect(edges).toHaveLength(3);
+			expect(edges[0].rel).toBe("has_san");
+			expect(edges[0].to.type).toBe("host");
 		});
 	});
 });

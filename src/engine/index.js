@@ -125,10 +125,25 @@ const createEngine = () => {
 				const batches = Array.isArray(output) ? output : [output];
 				let changed = false;
 
+				const isDerivation = block.mergeInto !== block.forEach;
+
 				batches.forEach((fields) => {
 					const result = envelope.makeResult(work, fields);
 					const toMerge = Object.assign({}, seed, result.fields);
 					const merged = store.upsert(block.mergeInto, toMerge, result.provenance);
+
+					// Derivation (new-type entity) records a lineage edge from the
+					// triggering parent to the produced child. Enrichment (same
+					// type) records none.
+					if (isDerivation) {
+						store.addEdge({
+							from: { type: block.forEach, key: entity._identity },
+							rel: block.relation || block.id,
+							to: { type: block.mergeInto, key: merged._identity },
+							via: block.id,
+							at: result.provenance.at
+						});
+					}
 
 					// A version advance for this identity means it changed.
 					const seenKey = block.mergeInto + "|" + merged._identity;

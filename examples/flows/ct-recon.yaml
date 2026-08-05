@@ -14,7 +14,8 @@ entities:
   cert:
     key: [id]                          # a CT log entry
   host:
-    key: [name]                        # stable identity; ip/ports accumulate as fields
+    key: [name]                        # stable identity; enrichments accumulate
+    # merge defaults to first-write-wins-with-provenance (monotonic => converges)
 
 sources:
   - id: ct
@@ -26,7 +27,7 @@ sources:
       cert.is_precert: false            # skip pre-certificates
 
 blocks:
-  # Fan out: one cert -> one host per SAN.
+  # Fan out: one cert -> one host per SAN, recording a cert --has_san--> host edge.
   - id: fanout
     uses: fanout
     for_each: cert
@@ -34,6 +35,7 @@ blocks:
       items: "{{ cert.san }}"
       as: name
     merge_into: host
+    relation: has_san
 
   # Resolve until the host has an ip (guard makes it run once, then settle).
   - id: resolve
