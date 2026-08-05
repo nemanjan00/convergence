@@ -6,6 +6,7 @@
 // resolver. Tolerant: nothing found => {}.
 
 const resolver = require("../../services/resolver");
+const host = require("../../utils/host");
 
 const COMMON = [
 	"_sip._tcp", "_sips._tcp", "_sip._udp",
@@ -20,7 +21,7 @@ module.exports = {
 	uses: "dns.srv",
 	rate: { maxConcurrent: 10 },
 	handler: (input) => {
-		const domain = String(input.domain || input.name || "").replace(/^\*\./, "").trim();
+		const domain = host.from(input);
 
 		if (!domain) {
 			return Promise.resolve({});

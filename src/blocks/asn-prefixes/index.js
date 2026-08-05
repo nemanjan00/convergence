@@ -21,15 +21,7 @@ module.exports = {
 		const asn = "AS" + String(raw).replace(/^AS/i, "");
 		const url = "https://stat.ripe.net/data/announced-prefixes/data.json?resource=" + encodeURIComponent(asn);
 
-		return http.get(url).then((response) => {
-			let body;
-
-			try {
-				body = JSON.parse(response.body);
-			} catch {
-				return {};
-			}
-
+		return http.getJson(url).then((body) => {
 			const list = body && body.data && body.data.prefixes;
 
 			if (!list || list.length === 0) {
@@ -46,8 +38,6 @@ module.exports = {
 			if (v6.length > 0) { fields.prefixes_v6 = v6; }
 
 			return fields;
-		}).catch(() => {
-			return {};
 		});
 	}
 };

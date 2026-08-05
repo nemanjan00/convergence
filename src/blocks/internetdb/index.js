@@ -17,16 +17,8 @@ module.exports = {
 			return Promise.resolve({});
 		}
 
-		return http.get("https://internetdb.shodan.io/" + encodeURIComponent(ip)).then((response) => {
-			if (response.status !== 200) {
-				return {};
-			}
-
-			let data;
-
-			try {
-				data = JSON.parse(response.body);
-			} catch {
+		return http.getJson("https://internetdb.shodan.io/" + encodeURIComponent(ip)).then((data) => {
+			if (!data) {
 				return {};
 			}
 
@@ -39,8 +31,6 @@ module.exports = {
 			if (data.vulns && data.vulns.length > 0) { fields.vulns = data.vulns; }
 
 			return fields;
-		}).catch(() => {
-			return {};
 		});
 	}
 };

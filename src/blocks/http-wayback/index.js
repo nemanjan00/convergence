@@ -5,6 +5,7 @@
 // urlkey server-side; capped here. Via services/http. Tolerant.
 
 const http = require("../../services/http");
+const host = require("../../utils/host");
 
 const LIMIT = 1000;
 
@@ -12,7 +13,7 @@ module.exports = {
 	uses: "http.wayback",
 	rate: { maxConcurrent: 3 },
 	handler: (input) => {
-		const domain = String(input.domain || input.name || input.host || "").replace(/^\*\./, "").trim();
+		const domain = host.from(input);
 
 		if (!domain) {
 			return Promise.resolve({});

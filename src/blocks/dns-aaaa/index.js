@@ -5,12 +5,13 @@
 // Strips a leading wildcard label. Tolerant: no AAAA / failure => {}.
 
 const dns = require("dns").promises;
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "dns.aaaa",
 	rate: { maxConcurrent: 20 },
 	handler: (input) => {
-		const name = String(input.name || "").replace(/^\*\./, "").trim();
+		const name = host.from(input);
 
 		if (!name) {
 			return Promise.resolve({});

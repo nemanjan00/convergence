@@ -6,6 +6,7 @@
 // Wildcards dropped, deduped, capped. Tolerant: nothing / failure => {}.
 
 const crtsh = require("../../services/crtsh");
+const host = require("../../utils/host");
 
 const MAX_SUBDOMAINS = 500;
 
@@ -13,7 +14,7 @@ module.exports = {
 	uses: "ct.subdomains",
 	rate: { maxConcurrent: 2 },
 	handler: (input) => {
-		const domain = String(input.domain || input.name || "").replace(/^\*\./, "").trim();
+		const domain = host.from(input);
 
 		if (!domain) {
 			return Promise.resolve({});

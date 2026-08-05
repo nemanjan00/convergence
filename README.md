@@ -24,10 +24,11 @@ anything, every field annotated with where it came from.
 
 ## Interfaces
 
-- **AI → MCP**: list blocks, compose a flow, validate, submit, inspect results.
-- **Human → Flow Builder**: a visual editor over the same YAML (single source of
-  truth). Planned frontend: [`qrp`](https://www.npmjs.com/package/@nemanjan00/qrp),
-  bundled with esbuild.
+- **AI → MCP**: list blocks, validate a flow, run it to convergence, query
+  entities (`src/mcp`, `yarn mcp`) — all over the `@modelcontextprotocol` SDK.
+- **Human → Flow Builder**: a [`qrp`](https://www.npmjs.com/package/@nemanjan00/qrp)
+  frontend (`frontend/`, esbuild-bundled) over the same YAML — entity explorer,
+  draggable node canvas, discovery graph, and an n8n-style **Executions** log.
 
 ## Data plane
 
@@ -42,35 +43,41 @@ anything, every field annotated with where it came from.
 
 ## Status
 
-Working reference implementation (in-process, offline): config, block-contract
-envelopes, entity store with provenance merge, a bounded-concurrency runtime
-with sift guards and `queue-promised` rate limiting, a **YAML→flow loader**
-(template compilation + full spec validation) so the contract is executable, and
-the recon **toolkit ported** into contract-ready services/utils.
+Working end-to-end on live network: the convergence engine (entity-state
+fixpoint, versioned store, per-field provenance, first-class lineage edges,
+typed-field auto-linking), a **YAML→flow loader** (template compilation + full
+spec validation), **67 blocks + 4 sources** ([`docs/BLOCKS.md`](docs/BLOCKS.md)),
+the MCP interface, the qrp frontend, an execution journal (Mongo-persistable),
+optional Mongo persistence, and a cron **monitor** for watching targets over
+time.
 
 ```bash
 yarn install
-yarn flow     # loads, validates, and RUNS examples/flows/ct-recon.yaml
-yarn demo     # same pipeline built programmatically
-yarn test     # 52 tests
+yarn flow      # load, validate, and RUN examples/flows/ct-recon.yaml (live)
+yarn export    # run a flow and serialize entities+provenance+edges+executions
+yarn mcp       # AI-facing MCP server (stdio)
+yarn monitor   # re-run a flow on a cron (MONITOR_CRON); accumulate + alert
+yarn test      # 258 tests
 yarn lint
+yarn frontend:build   # esbuild-bundle the qrp UI to a self-contained HTML
 ```
 
 `yarn flow` parses the real YAML, validates it (ids, entities, for_each
 producers, cycles, sift shape, template paths), compiles `{{ }}` templates, and
-executes it — three certs in, the pre-cert dropped by `filter:`, two
-fully-provenanced host entities out.
+converges it live — e.g. `ct-recon.yaml`: CT logs → SANs fan out to hosts →
+DNS/RDAP/ports/TLS/HTTP enrich each, every field provenanced, the discovery
+graph recorded as edges.
 
-Ported toolkit (see [`docs/BLOCK_CONTRACT.md`](docs/BLOCK_CONTRACT.md)):
-`balancer`, `ip`, `subnet`, `geo`, `retry`, `random-ip`, `useragent`,
-`dns-cache`, `cache` (redis/in-memory), `resolver`, `dns-picker`, `asn`, `rdap`,
-`ip-lookup`, `ip-country`.
+**Block library** — 67 blocks across discovery (CT/passive DNS), DNS, mail,
+IP/ASN/network, TLS/certs, HTTP/web (incl. a self-feeding crawler),
+threat-intel, forensics, and flow control (`filter`, `regex`, `js`, `cli`,
+`webhook`). Full catalog with input/output + composition scenarios in
+[`docs/BLOCKS.md`](docs/BLOCKS.md).
 
-Next milestones: wrap those services as real contract blocks + a live
-`source.ct-log`; the streaming/queue substrate for unbounded sources; the MCP
-interface; and the qrp flow builder. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
-[`docs/DATA_SOURCES.md`](docs/DATA_SOURCES.md).
+Pending: engine **parent references** (reach a derived entity's ancestors in
+`inputs`/`when`/`filter`), a served HTTP backend (re-run from the Executions
+panel + inbound `source.webhook` route), and a Mongo-native store for
+explorer-at-scale. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Docs
 

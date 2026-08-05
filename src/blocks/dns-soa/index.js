@@ -5,6 +5,7 @@
 // Tolerant: no SOA / failure => {}.
 
 const resolver = require("../../services/resolver");
+const host = require("../../utils/host");
 
 // SOA rname is an email with the @ written as the first unescaped dot:
 // "hostmaster.example.com" -> "hostmaster@example.com".
@@ -23,7 +24,7 @@ module.exports = {
 	uses: "dns.soa",
 	rate: { maxConcurrent: 20 },
 	handler: (input) => {
-		const name = String(input.name || "").replace(/^\*\./, "").trim();
+		const name = host.from(input);
 
 		if (!name) {
 			return Promise.resolve({});

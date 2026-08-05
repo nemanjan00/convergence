@@ -6,12 +6,13 @@
 // data. Via services/http. Tolerant.
 
 const http = require("../../services/http");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "passive.hackertarget",
 	rate: { maxConcurrent: 3 },
 	handler: (input) => {
-		const domain = String(input.domain || input.name || "").replace(/^\*\./, "").trim();
+		const domain = host.from(input);
 
 		if (!domain) {
 			return Promise.resolve({});

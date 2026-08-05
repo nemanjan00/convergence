@@ -63,9 +63,12 @@ come from there and are considered binding for this codebase.
 ## Commands
 
 ```bash
-yarn demo   # runnable proof: blocks -> one entity, provenanced
-yarn test   # jest
-yarn lint   # eslint (flat config)
+yarn flow    # load, validate, and RUN examples/flows/ct-recon.yaml (live)
+yarn export  # run + serialize entities/provenance/edges/executions (JSON)
+yarn mcp     # AI-facing MCP server (stdio)
+yarn monitor # re-run a flow on a cron (MONITOR_CRON) — watch over time
+yarn test    # jest
+yarn lint    # eslint (flat config)
 ```
 
 ## Block/source catalog

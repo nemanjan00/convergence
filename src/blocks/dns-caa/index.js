@@ -4,12 +4,13 @@
 // a mis-issuance check. Tolerant: no CAA / failure => {}.
 
 const resolver = require("../../services/resolver");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "dns.caa",
 	rate: { maxConcurrent: 20 },
 	handler: (input) => {
-		const name = String(input.name || "").replace(/^\*\./, "").trim();
+		const name = host.from(input);
 
 		if (!name) {
 			return Promise.resolve({});

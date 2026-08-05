@@ -18,15 +18,7 @@ module.exports = {
 
 		const url = "https://stat.ripe.net/data/network-info/data.json?resource=" + encodeURIComponent(ip);
 
-		return http.get(url).then((response) => {
-			let body;
-
-			try {
-				body = JSON.parse(response.body);
-			} catch {
-				return {};
-			}
-
+		return http.getJson(url).then((body) => {
 			const data = body && body.data;
 
 			if (!data) {
@@ -43,8 +35,6 @@ module.exports = {
 			}
 
 			return fields;
-		}).catch(() => {
-			return {};
 		});
 	}
 };

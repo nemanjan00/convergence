@@ -4,12 +4,13 @@
 // `cname` to link -> host so the target becomes its own node. Tolerant.
 
 const resolver = require("../../services/resolver");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "dns.cname",
 	rate: { maxConcurrent: 20 },
 	handler: (input) => {
-		const name = String(input.name || "").replace(/^\*\./, "").trim();
+		const name = host.from(input);
 
 		if (!name) {
 			return Promise.resolve({});

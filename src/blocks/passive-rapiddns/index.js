@@ -6,6 +6,7 @@
 // services/http. Tolerant: nothing / failure => {}.
 
 const http = require("../../services/http");
+const host = require("../../utils/host");
 
 const MAX_SUBDOMAINS = 1000;
 
@@ -13,7 +14,7 @@ module.exports = {
 	uses: "passive.rapiddns",
 	rate: { maxConcurrent: 2 },
 	handler: (input) => {
-		const domain = String(input.domain || input.name || "").replace(/^\*\./, "").trim();
+		const domain = host.from(input);
 
 		if (!domain) {
 			return Promise.resolve({});

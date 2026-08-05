@@ -18,15 +18,7 @@ module.exports = {
 		const asn = "AS" + String(raw).replace(/^AS/i, "");
 		const url = "https://stat.ripe.net/data/as-overview/data.json?resource=" + encodeURIComponent(asn);
 
-		return http.get(url).then((response) => {
-			let body;
-
-			try {
-				body = JSON.parse(response.body);
-			} catch {
-				return {};
-			}
-
+		return http.getJson(url).then((body) => {
 			const data = body && body.data;
 
 			if (!data) {
@@ -40,8 +32,6 @@ module.exports = {
 			if (data.type) { fields.asn_type = data.type; }
 
 			return fields;
-		}).catch(() => {
-			return {};
 		});
 	}
 };

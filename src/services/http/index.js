@@ -60,6 +60,26 @@ const http = {
 				redirects: response.redirectUrls || []
 			};
 		});
+	},
+
+	// GET a URL and parse the body as JSON. Tolerant sugar over get() for the
+	// many blocks that hit a key-free JSON API: resolves the parsed value on a
+	// 2xx with valid JSON, or `null` on any non-2xx / parse failure / transport
+	// error — so callers do `if (!data) { return {}; }` and never see a throw.
+	getJson: (url, options) => {
+		return http.get(url, options).then((response) => {
+			if (response.status < 200 || response.status >= 300) {
+				return null;
+			}
+
+			try {
+				return JSON.parse(response.body);
+			} catch {
+				return null;
+			}
+		}).catch(() => {
+			return null;
+		});
 	}
 };
 

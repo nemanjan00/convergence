@@ -16,18 +16,10 @@ module.exports = {
 			return Promise.resolve({});
 		}
 
-		return http.get("https://api.greynoise.io/v3/community/" + encodeURIComponent(ip), {
+		return http.getJson("https://api.greynoise.io/v3/community/" + encodeURIComponent(ip), {
 			headers: { accept: "application/json" }
-		}).then((response) => {
-			if (response.status !== 200) {
-				return {};
-			}
-
-			let data;
-
-			try {
-				data = JSON.parse(response.body);
-			} catch {
+		}).then((data) => {
+			if (!data) {
 				return {};
 			}
 
@@ -40,8 +32,6 @@ module.exports = {
 			if (data.last_seen) { fields.greynoise_last_seen = data.last_seen; }
 
 			return fields;
-		}).catch(() => {
-			return {};
 		});
 	}
 };

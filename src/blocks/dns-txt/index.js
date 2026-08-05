@@ -5,12 +5,13 @@
 // on its own. Tolerant: no TXT / failure => {}.
 
 const resolver = require("../../services/resolver");
+const host = require("../../utils/host");
 
 module.exports = {
 	uses: "dns.txt",
 	rate: { maxConcurrent: 20 },
 	handler: (input) => {
-		const name = String(input.name || "").replace(/^\*\./, "").trim();
+		const name = host.from(input);
 
 		if (!name) {
 			return Promise.resolve({});

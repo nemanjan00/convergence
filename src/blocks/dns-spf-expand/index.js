@@ -8,6 +8,7 @@
 // Tolerant: no SPF => {}.
 
 const resolver = require("../../services/resolver");
+const host = require("../../utils/host");
 
 const MAX_DEPTH = 4;
 const MAX_LOOKUPS = 20;
@@ -25,7 +26,7 @@ module.exports = {
 	uses: "dns.spf-expand",
 	rate: { maxConcurrent: 10 },
 	handler: (input) => {
-		const domain = String(input.domain || input.name || "").replace(/^\*\./, "").trim();
+		const domain = host.from(input);
 
 		if (!domain) {
 			return Promise.resolve({});
