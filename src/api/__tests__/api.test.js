@@ -23,7 +23,22 @@ describe("HTTP API", () => {
 		return request(app).get("/api/health").expect(200).then((res) => {
 			expect(res.body.ok).toBe(true);
 			expect(res.body.blocks).toBeGreaterThan(0);
+			expect(res.body.persist).toBe("per-mutation");
 		});
+	});
+
+	it("mutations call persist() BEFORE responding (durable on every write)", () => {
+		let calls = 0;
+		const spied = createApp({ persist: () => { calls = calls + 1; return Promise.resolve(); } });
+
+		return request(spied).post("/api/playbooks").send({ name: "p", yaml: VALID_YAML }).expect(201)
+			.then((res) => {
+				expect(calls).toBe(1); // create persisted
+				return request(spied).post("/api/playbooks/" + res.body.id + "/state").send({ state: "active" }).expect(200);
+			})
+			.then(() => {
+				expect(calls).toBe(2); // activate persisted -> state survives a restart
+			});
 	});
 
 	it("GET /api/blocks lists the library", () => {

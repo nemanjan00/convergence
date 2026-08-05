@@ -90,8 +90,10 @@ const createApp = (deps) => {
 	});
 
 	// --- meta / data plane ---
+	// `persist: "per-mutation"` marks the build that saves to Mongo on every
+	// write (not just the scheduler tick) — curl this to confirm you're on it.
 	app.get("/api/health", (req, res) => {
-		res.json({ ok: true, blocks: mcp.listBlocks().blocks.length });
+		res.json({ ok: true, blocks: mcp.listBlocks().blocks.length, persist: "per-mutation" });
 	});
 
 	app.get("/api/blocks", (req, res) => { res.json(mcp.listBlocks()); });
