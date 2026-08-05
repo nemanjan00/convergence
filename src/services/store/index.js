@@ -79,11 +79,16 @@ const store = {
 		const existing = collection.byIdentity[identity] || {
 			_type: entityType,
 			_identity: identity,
+			_version: 0,
 			fields: {}
 		};
 
-		// Build the next entity without mutating the existing one.
+		// Build the next entity without mutating the existing one. Track whether
+		// anything actually changed — the convergence engine uses `_version` to
+		// know when an entity settled (a no-op write keeps the same field object,
+		// so the version does not move and the fixpoint terminates).
 		const nextFields = Object.assign({}, existing.fields);
+		let changed = false;
 
 		Object.keys(fields).forEach((name) => {
 			const incoming = {
@@ -91,12 +96,19 @@ const store = {
 				provenance: provenance
 			};
 
-			nextFields[name] = merge(existing.fields[name], incoming);
+			const nextField = merge(existing.fields[name], incoming);
+
+			if (nextField !== existing.fields[name]) {
+				changed = true;
+			}
+
+			nextFields[name] = nextField;
 		});
 
 		const merged = {
 			_type: entityType,
 			_identity: identity,
+			_version: changed ? existing._version + 1 : existing._version,
 			fields: nextFields
 		};
 
