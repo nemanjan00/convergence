@@ -97,11 +97,11 @@ become the backing services for real blocks under the contract.
 | --- | --- | --- | --- |
 | lazy `load()` | `utils/load` | use ESM-only libs from CJS (lazy import) | ✅ done |
 | balancer | `utils/balancer` | weighted-random pool (rotation primitive) | ✅ tested |
-| ip | `utils/ip` | mask + enumerate containing nets (v4/v6) | ✅ tested |
+| ip | `utils/ip` | address framework: mask, nets, isInSubnet, CIDR contains, random (v4/v6) | ✅ tested |
 | subnet | `utils/subnet` | VLSM subnet layout | ✅ tested |
 | geo | `utils/geo` | nearest available proxy country | ✅ tested |
 | retry | `utils/retry` | TTL-bounded retry wrapper | ✅ tested |
-| random-ip | `utils/random-ip` | random egress IP in owned ranges (v4/v6) | ✅ tested |
+| random-ip | `utils/random-ip` | egress-range rotation POLICY over `ip.random()` | ✅ tested |
 | useragent | `utils/useragent` | coverage-weighted realistic UA rotation | ✅ loads |
 | dns-cache | `utils/dns-cache` | process-local caching lookup (net.connect compat) | ✅ done |
 | cache | `services/cache` | Redis or in-memory fallback (get/mget/msetEx) | ✅ tested |

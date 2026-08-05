@@ -47,4 +47,18 @@ describe("ip", () => {
 			return ip("1.2.3.4").contains("1.2.3.5");
 		}).toThrow(/requires a CIDR/);
 	});
+
+	it("generates a random address within a CIDR (v4 and v6)", () => {
+		Array(20).fill().forEach(() => {
+			const v4 = ip("93.184.216.0/24").random();
+			expect(ip("93.184.216.0/24").contains(v4)).toBe(true);
+
+			const v6 = ip("2a0d:f407:1006::/48").random();
+			expect(ip("2a0d:f407:1006::/48").contains(v6)).toBe(true);
+		});
+	});
+
+	it("random() on a bare address returns itself", () => {
+		expect(ip("93.184.216.34").random()).toBe("93.184.216.34");
+	});
 });

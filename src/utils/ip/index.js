@@ -8,6 +8,7 @@
 //   ip("93.184.216.0/24").contains("93.184.216.5")     // true
 //   ip("93.184.216.34").nets()                   // ["…/1", …, "…/32"]
 
+const crypto = require("crypto");
 const ipUtil = require("ipaddr.js");
 
 module.exports = (input) => {
@@ -85,6 +86,33 @@ module.exports = (input) => {
 			const bits = ip._prefix === undefined ? ip._buffer.length * 8 : ip._prefix;
 
 			return ip.mask(bits);
+		},
+
+		// A random address within this CIDR: keep the network bits, randomise the
+		// host bits (same binary op for v4 and v6). A bare address has no host
+		// bits, so it returns itself. Used for egress-address rotation.
+		random: () => {
+			const totalBits = ip._buffer.length * 8;
+			const prefix = ip._prefix === undefined ? totalBits : ip._prefix;
+			const buffer = Buffer.from(ipUtil.parse(ip.network()).toByteArray());
+			const hostBits = totalBits - prefix;
+
+			if (hostBits <= 0) {
+				return ipUtil.fromByteArray(Array.from(buffer)).toString();
+			}
+
+			const hostByteCount = Math.ceil(hostBits / 8);
+			const random = crypto.randomBytes(hostByteCount);
+
+			// Zero the bits of the top random byte that fall inside the prefix.
+			const overhang = hostByteCount * 8 - hostBits;
+			random[0] &= 0xff >> overhang;
+
+			for (let i = 0; i < hostByteCount; i++) {
+				buffer[buffer.length - 1 - i] |= random[hostByteCount - 1 - i];
+			}
+
+			return ipUtil.fromByteArray(Array.from(buffer)).toString();
 		},
 
 		// Every containing network, from /1 down to the full address length.
