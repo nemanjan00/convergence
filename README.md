@@ -9,6 +9,23 @@ entity's current **state** and re-run until nothing changes — so a fact ("port
 50 open", "resolved to this IP") triggers its reactions no matter which of a
 hundred paths discovered it.
 
+```mermaid
+flowchart LR
+  AI["AI · MCP"] -->|composes| PB["Playbook · YAML"]
+  Human["Human · Flow Builder"] -->|edits| PB
+  SRC["Sources<br/>(CT logs, lists, webhooks, ticks)"] --> ENG
+  PB --> ENG{{"Convergence engine<br/>run to a fixpoint"}}
+  ENG -->|"for_each entity · when state matches"| BLK["Blocks enrich<br/>(DNS · TLS · HTTP · RDAP · TI · …)"]
+  BLK --> STORE[("Entity store<br/>merge by identity · provenance · edges")]
+  STORE -.->|"a state change re-triggers blocks"| ENG
+  ENG --> JRN[["Execution journal"]]
+  STORE --> UI["Explorer · Graph · Playbooks"]
+  JRN --> UI
+```
+
+The dashed edge is the whole idea: a write to the store re-triggers every block
+whose guard now matches — the loop runs until the store stops changing.
+
 ## Why
 
 LLM agents skip steps, forget across compaction, can't sustain high throughput,
