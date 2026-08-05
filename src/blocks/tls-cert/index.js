@@ -1,7 +1,8 @@
 // Block: tls.cert — connect to host:443, read the live server certificate, and
-// extract issuer / subject / expiry / SANs. crt.sh-independent (it talks to the
-// host directly). The SANs are a great graph-growth signal: type the field to
-// link and each SAN materializes a host. Tolerant: unreachable / no-TLS => {}.
+// extract issuer / subject / expiry / SAN hostnames AND any email addresses the
+// cert carries (subject emailAddress or SAN rfc822/email: entries). Both are
+// graph-growth signals: type `cert_sans` to link -> host, `cert_emails` to link
+// -> email. crt.sh-independent. Tolerant: unreachable / no-TLS => {}.
 
 const tls = require("tls");
 
@@ -41,21 +42,37 @@ module.exports = {
 					return finish({});
 				}
 
-				const sans = String(cert.subjectaltname || "")
-					.split(",")
-					.map((entry) => {
-						return entry.trim().replace(/^DNS:/, "");
-					})
-					.filter((name) => {
-						return name.length > 0 && name.indexOf("*") === -1;
-					});
+				// One parse, several typed outputs: SAN hostnames and any emails
+				// the cert carries (SAN rfc822 / subject emailAddress).
+				const altNames = String(cert.subjectaltname || "").split(",").map((entry) => {
+					return entry.trim();
+				});
 
-				finish({
+				const sans = altNames
+					.filter((entry) => { return entry.indexOf("DNS:") === 0; })
+					.map((entry) => { return entry.slice(4); })
+					.filter((name) => { return name.length > 0 && name.indexOf("*") === -1; });
+
+				const emails = altNames
+					.filter((entry) => { return entry.indexOf("email:") === 0; })
+					.map((entry) => { return entry.slice(6); });
+
+				if (cert.subject.emailAddress) {
+					emails.push(cert.subject.emailAddress);
+				}
+
+				const fields = {
 					cert_issuer: cert.issuer && (cert.issuer.O || cert.issuer.CN),
 					cert_subject: cert.subject.CN,
 					cert_not_after: cert.valid_to,
 					cert_sans: Array.from(new Set(sans))
-				});
+				};
+
+				if (emails.length > 0) {
+					fields.cert_emails = Array.from(new Set(emails));
+				}
+
+				finish(fields);
 			});
 
 			socket.on("error", () => { finish({}); });

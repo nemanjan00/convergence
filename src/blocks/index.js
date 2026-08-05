@@ -20,6 +20,8 @@ const BLOCK_MODULES = [
 	"./ip-reverse",
 	"./tls-cert",
 	"./http-paths",
+	"./http-json",
+	"./map",
 	"./mail-mx",
 	"./mail-auth",
 	"./ip-country",
