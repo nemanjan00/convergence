@@ -115,6 +115,18 @@ describe("HTTP API", () => {
 		});
 	});
 
+	it("SPA history fallback: a client route serves the shell, not a 404", () => {
+		return request(app).get("/pb/some-id/overview").expect(200).then((res) => {
+			expect(res.headers["content-type"]).toMatch(/html/);
+		});
+	});
+
+	it("unknown /api path still 404s JSON (not the SPA shell)", () => {
+		return request(app).get("/api/does-not-exist").expect(404).then((res) => {
+			expect(res.body.error).toBeDefined();
+		});
+	});
+
 	it("GET /api/samples lists the bundled example flows as importable artifacts", () => {
 		return request(app).get("/api/samples").expect(200).then((res) => {
 			expect(res.body.samples.length).toBeGreaterThan(0);

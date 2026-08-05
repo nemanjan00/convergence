@@ -93,7 +93,11 @@ const createApp = (deps) => {
 	// `persist: "per-mutation"` marks the build that saves to Mongo on every
 	// write (not just the scheduler tick) — curl this to confirm you're on it.
 	app.get("/api/health", (req, res) => {
-		res.json({ ok: true, blocks: mcp.listBlocks().blocks.length, persist: "per-mutation" });
+		// `rev` changes whenever server state changes (new executions or a playbook
+		// mutation) — the UI polls it for live updates.
+		const rev = journal.all().length + ":" + playbooks.all().map((p) => { return p.updated_at || ""; }).join(",");
+
+		res.json({ ok: true, blocks: mcp.listBlocks().blocks.length, persist: "per-mutation", rev: rev });
 	});
 
 	app.get("/api/blocks", (req, res) => { res.json(mcp.listBlocks()); });
@@ -221,9 +225,9 @@ const createApp = (deps) => {
 	// stale copy (the #1 "I rebuilt but still see the old UI").
 	const noStore = (res) => { res.set("cache-control", "no-store"); };
 
-	// `/` serves the LIVE page (no baked data; the bundle fetches /api/snapshot).
+	// Serve the live app shell (no baked data; the bundle fetches /api/snapshot).
 	// Falls back to a clear message if the frontend hasn't been built yet.
-	app.get("/", (req, res) => {
+	const serveShell = (res) => {
 		noStore(res);
 		res.sendFile(path.join(dist, "live.html"), (error) => {
 			if (error) {
@@ -232,7 +236,9 @@ const createApp = (deps) => {
 					"<code>yarn frontend:build</code> to serve it here.</p>");
 			}
 		});
-	});
+	};
+
+	app.get("/", (req, res) => { serveShell(res); });
 
 	// Unknown /api/* path -> JSON 404 (never fall through to static HTML).
 	app.use("/api", (req, res) => {
@@ -240,6 +246,11 @@ const createApp = (deps) => {
 	});
 
 	app.use(express.static(dist, { etag: false, lastModified: false, setHeaders: noStore }));
+
+	// SPA history fallback: any other GET serves the app shell so client routes
+	// like /pb/:id/overview work on refresh / deep-link (not a 404). /api/* is
+	// handled above, so it never reaches here.
+	app.get(/.*/, (req, res) => { serveShell(res); });
 
 	// JSON error handler — bad body / thrown route errors come back as JSON, not
 	// an HTML stack page. (4-arg signature marks it as express error middleware.)

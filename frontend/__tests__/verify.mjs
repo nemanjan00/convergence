@@ -8,6 +8,10 @@ import { GlobalRegistrator } from "@happy-dom/global-registrator";
 
 GlobalRegistrator.register();
 
+// The qrp router needs a real browser history; under happy-dom drive navigation
+// through the reactive state path instead (same code the router calls).
+window.__NO_ROUTER__ = true;
+
 const app = await import("../app.js");
 
 const data = {

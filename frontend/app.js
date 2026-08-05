@@ -7,7 +7,7 @@
 // so it runs both in the browser (frontend/entry.js) and under happy-dom in Node
 // (frontend/__tests__), which is how the UI is verified without a browser.
 
-import { state, el, list, when } from "@nemanjan00/qrp";
+import { state, el, list, when, router, navigate } from "@nemanjan00/qrp";
 import { dump as dumpYamlLib } from "js-yaml";
 
 const dumpYaml = (spec) => {
@@ -1257,6 +1257,19 @@ const playbookOverview = (data, ui) => {
 
 // --- Shell ----------------------------------------------------------------
 
+// Derive the view + open playbook from the URL path (deep-link / back-forward).
+//   /                     -> playbooks list (home)
+//   /pb/<id>              -> that playbook's overview
+//   /pb/<id>/<section>    -> that playbook, that section
+const parseLocation = () => {
+	const path = (typeof window !== "undefined" && window.location && window.location.pathname) || "/";
+	const match = path.match(/^\/pb\/([^/]+)(?:\/([^/]+))?/);
+
+	if (match) { return { openPlaybook: decodeURIComponent(match[1]), view: match[2] || "overview" }; }
+
+	return { openPlaybook: null, view: "playbooks" };
+};
+
 export const render = (root, data) => {
 	const graph = computeGraph(data.spec || { entities: {}, sources: [], blocks: [] });
 
@@ -1280,11 +1293,12 @@ export const render = (root, data) => {
 			schedule: null, valid: true, yaml: data.yaml, last_run_at: null
 		}] : []);
 
-	// Always land on the Playbooks LIST (the top level). A refresh passes
-	// __view / __openPlaybook to stay put.
+	// The URL is the source of truth for where we are (deep-link + back/forward);
+	// a re-render re-derives it, so state survives refreshes.
+	const loc = parseLocation();
 	const ui = state({
-		view: data.__view || "playbooks",
-		openPlaybook: data.__openPlaybook || null,
+		view: loc.view,
+		openPlaybook: loc.openPlaybook,
 		served: Boolean(data.__served),
 		playbooks: seedPlaybooks,
 		modal: null,
@@ -1382,48 +1396,45 @@ export const render = (root, data) => {
 		builder: { title: "Flow", sub: "the flow as a node graph", ico: "⚙" }
 	};
 
-	// Level transitions rebuild the nav (home <-> playbook page), so they do a
-	// local re-render carrying the live state (playbooks include local imports).
-	ui.rerender = () => {
-		const carry = Object.assign({}, data, {
-			__served: ui.served, __view: ui.view, __openPlaybook: ui.openPlaybook, playbooks: ui.playbooks
-		});
-		root.innerHTML = "";
-		render(root, carry);
+	// Navigation is URL-driven: go() sets the reactive state (so the shell updates
+	// with no full re-render) AND pushes the URL via the qrp router when available
+	// (back/forward + deep-link + shareable links). On a static export (no
+	// history) it just updates state.
+	ui.go = (url, view, openPlaybook) => {
+		// With the router live, drive everything through the URL (the route handler
+		// sets the state) so back/forward and deep-links stay consistent. Without
+		// it (static export / tests), set the reactive state directly.
+		if (root.__router) {
+			try { navigate(url); return; } catch { /* fall through to direct */ }
+		}
+
+		ui.openPlaybook = openPlaybook;
+		ui.view = view;
+		ui.frame = ui.frame + 1;
 	};
-	ui.openBook = (id) => { ui.openPlaybook = id; ui.view = "overview"; ui.rerender(); };
-	ui.closeBook = () => { ui.openPlaybook = null; ui.view = "playbooks"; ui.rerender(); };
+	ui.openBook = (id) => { ui.go("/pb/" + id + "/overview", "overview", id); };
+	ui.closeBook = () => { ui.go("/", "playbooks", null); };
 
 	// A data-view sub-nav item (only meaningful inside an open playbook).
 	const navItem = (id, label) => {
 		return el("button", {
 			class: () => (ui.view === id ? "nav-item active" : "nav-item"),
-			onclick: () => { ui.view = id; }
+			onclick: () => { ui.go("/pb/" + ui.openPlaybook + "/" + id, id, ui.openPlaybook); }
 		}, el("span", { class: "ico" }, SECTIONS[id].ico), el("span", {}, label));
 	};
 
-	const foot = el("div", { class: "sidebar-foot" },
-		el("span", { class: "dot " + (ui.served ? "live" : "snap") }),
-		ui.served ? "live · connected" : "static snapshot");
+	const homeNav = () => {
+		return el("div", { class: "nav-group" },
+			el("div", { class: "nav-label" }, "home"),
+			el("button", { class: "nav-item active", onclick: () => { ui.go("/", "playbooks", null); } },
+				el("span", { class: "ico" }, "▤"), el("span", {}, "Playbooks"),
+				el("span", { class: "badge-n" }, String(ui.playbooks.length))));
+	};
 
-	// Two-level rail. HOME: just the Playbooks list. PLAYBOOK PAGE: a back link,
-	// the playbook name, and its data views underneath — a clear hierarchy.
-	let sidebar;
+	const pbNav = (id) => {
+		const openName = (ui.playbooks.find((b) => { return b.id === id; }) || { name: "playbook" }).name;
 
-	if (!ui.openPlaybook) {
-		sidebar = el("aside", { class: "sidebar" },
-			el("div", { class: "brand" }, "convergence"),
-			el("div", { class: "nav-group" },
-				el("div", { class: "nav-label" }, "home"),
-				el("button", { class: "nav-item active" },
-					el("span", { class: "ico" }, "▤"), el("span", {}, "Playbooks"),
-					el("span", { class: "badge-n" }, String(ui.playbooks.length)))),
-			foot);
-	} else {
-		const openName = (ui.playbooks.find((b) => { return b.id === ui.openPlaybook; }) || { name: "playbook" }).name;
-
-		sidebar = el("aside", { class: "sidebar" },
-			el("div", { class: "brand" }, "convergence"),
+		return el("div", {},
 			el("button", { class: "nav-item", title: "back to all playbooks", onclick: () => { ui.closeBook(); } },
 				el("span", { class: "ico" }, "←"), el("span", {}, "All playbooks")),
 			el("div", { class: "nav-group" },
@@ -1432,9 +1443,19 @@ export const render = (root, data) => {
 				navItem("explorer", "Entities"),
 				navItem("graph", "Graph"),
 				navItem("executions", "Executions"),
-				navItem("builder", "Flow")),
-			foot);
-	}
+				navItem("builder", "Flow")));
+	};
+
+	const foot = el("div", { class: "sidebar-foot" },
+		el("span", { class: "dot " + (ui.served ? "live" : "snap") }),
+		ui.served ? "live · connected" : "static snapshot");
+
+	// Two-level rail — reactive on the open playbook, so navigating swaps the nav
+	// level without a full re-render.
+	const sidebar = el("aside", { class: "sidebar" },
+		el("div", { class: "brand" }, "convergence"),
+		when(() => (ui.openPlaybook ? "pb:" + ui.openPlaybook : "home"), (key) => (key === "home" ? homeNav() : pbNav(ui.openPlaybook))),
+		foot);
 
 	const topbar = el("div", { class: "topbar" }, () => {
 		ui.frame;
@@ -1465,6 +1486,39 @@ export const render = (root, data) => {
 	const app = el("div", { class: "shell" }, sidebar, main, overlay);
 
 	root.appendChild(app);
+
+	// URL routing (back/forward, deep-link, shareable links) via the qrp router.
+	// Handlers set the reactive state; nav uses ui.go() to push URLs. Disposed +
+	// reinstalled on each render; degrades gracefully where history is absent.
+	if (typeof window !== "undefined" && window.history && window.history.pushState && !window.__NO_ROUTER__) {
+		if (root.__router) { try { root.__router.dispose(); } catch { /* noop */ } }
+
+		const home = () => { ui.openPlaybook = null; ui.view = "playbooks"; ui.frame = ui.frame + 1; };
+
+		try {
+			root.__router = router({
+				"/": home,
+				"/pb/:id": (outlet, ctx) => { navigate("/pb/" + ctx.params.id + "/overview", { replace: true }); },
+				"/pb/:id/:section": (outlet, ctx) => { ui.openPlaybook = ctx.params.id; ui.view = ctx.params.section; ui.frame = ui.frame + 1; }
+			}, document.createElement("div"), { remount: true, notFound: home });
+		} catch { root.__router = null; }
+	}
+
+	// Live data: poll a cheap revision; when server state changes (a scheduled run
+	// finished, another client mutated), reload — unless the user is mid-action.
+	if (ui.served && typeof setInterval !== "undefined") {
+		if (root.__poll) { clearInterval(root.__poll); }
+
+		root.__poll = setInterval(() => {
+			fetch("/api/health").then((r) => { return r.json(); }).then((h) => {
+				if (root.__lastRev === undefined) { root.__lastRev = h.rev; return; }
+				if (h.rev !== root.__lastRev && !ui.modal && !ui.drag && !ui.running) {
+					root.__lastRev = h.rev;
+					ui.refresh();
+				}
+			}).catch(() => { /* offline; try next tick */ });
+		}, 5000);
+	}
 
 	// Auto-dismiss a toast after a few seconds.
 	if (ui.toast && typeof setTimeout !== "undefined") {

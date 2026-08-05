@@ -78,7 +78,9 @@ module.exports = [
 				console: "readonly",
 				process: "readonly",
 				fetch: "readonly",
-				setTimeout: "readonly"
+				setTimeout: "readonly",
+				setInterval: "readonly",
+				clearInterval: "readonly"
 			}
 		},
 		rules: {
