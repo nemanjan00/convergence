@@ -7,10 +7,13 @@ describe("network blocks — offline tolerance", () => {
 	const map = blocks.allMap();
 
 	[
-		"dns.a", "dns.aaaa", "dns.txt", "dns.ns", "dns.cname", "dns.caa",
-		"port.scan", "http.title", "http.headers", "http.robots",
-		"http.security-txt", "http.favicon", "rdap", "ip.asn", "ip.geo",
-		"ip.reverse", "tls.cert", "http.paths", "http.json", "mail.mx", "mail.auth"
+		"dns.a", "dns.aaaa", "dns.txt", "dns.ns", "dns.cname", "dns.caa", "dns.soa",
+		"port.scan", "port.banner", "http.title", "http.headers", "http.robots",
+		"http.security-txt", "http.favicon", "http.redirects", "http.links",
+		"http.cookies", "http.dirdig", "http.request", "rdap", "rdap.domain",
+		"ip.asn", "ip.geo", "ip.reverse", "tls.cert", "tls.versions", "http.paths",
+		"http.json", "mail.mx", "mail.auth", "url.parse", "email.parse",
+		"hash.digest", "webhook", "cli"
 	].forEach((name) => {
 		it(name + " is registered", () => {
 			expect(map[name]).toBeDefined();

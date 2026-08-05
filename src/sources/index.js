@@ -4,10 +4,12 @@
 
 const ctLog = require("./ct-log");
 const list = require("./list");
+const webhook = require("./webhook");
 
 const BUILTIN = [
 	ctLog,
-	list
+	list,
+	webhook
 ];
 
 const sources = {

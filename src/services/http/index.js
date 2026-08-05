@@ -54,7 +54,10 @@ const http = {
 			return {
 				status: response.statusCode,
 				headers: response.headers,
-				body: response.body
+				body: response.body,
+				// Final URL after redirects + the chain got followed (for http.redirects).
+				url: response.url,
+				redirects: response.redirectUrls || []
 			};
 		});
 	}
