@@ -30,6 +30,11 @@ anything, every field annotated with where it came from.
   frontend (`frontend/`, esbuild-bundled) over the same YAML — entity explorer,
   draggable node canvas, discovery graph, and an n8n-style **Executions** log.
 
+**Playbooks** are saved flows with a lifecycle — `draft → active → paused`
+(`src/services/playbooks`). Active playbooks are run on a schedule by the
+monitor (`yarn playbooks`); they export/import as portable artifacts. Manage
+them over MCP (`list/get/save/set_state/export/import_playbook`).
+
 ## Data plane
 
 - **Flows**: YAML — declarative, diffable, versioned. See
@@ -57,7 +62,8 @@ yarn flow      # load, validate, and RUN examples/flows/ct-recon.yaml (live)
 yarn export    # run a flow and serialize entities+provenance+edges+executions
 yarn mcp       # AI-facing MCP server (stdio)
 yarn monitor   # re-run a flow on a cron (MONITOR_CRON); accumulate + alert
-yarn test      # 258 tests
+yarn playbooks # run every ACTIVE playbook on a cron (play/pause runtime)
+yarn test      # 272 tests
 yarn lint
 yarn frontend:build   # esbuild-bundle the qrp UI to a self-contained HTML
 ```

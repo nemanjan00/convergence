@@ -10,6 +10,7 @@ const sources = require("../sources");
 const loader = require("../loader");
 const engineFactory = require("../engine");
 const store = require("../services/store");
+const playbookRegistry = require("../services/playbooks");
 
 // Serialize an entity to a flat row with underscore-prefixed system fields
 // (mirrors the Trickest Live Tables shape).
@@ -106,6 +107,58 @@ const mcp = {
 
 			return { flow: flow.name, entities: entities, edges: store.edges() };
 		});
+	},
+
+	// --- Playbook management (draft/active/paused lifecycle) ----------------
+
+	// List playbooks (id, name, state, validity — not the full YAML).
+	listPlaybooks: () => {
+		return {
+			playbooks: playbookRegistry.all().map((book) => {
+				return {
+					id: book.id, name: book.name, state: book.state,
+					schedule: book.schedule, valid: book.valid,
+					updated_at: book.updated_at, last_run_at: book.last_run_at
+				};
+			})
+		};
+	},
+
+	// Get one playbook in full (incl. YAML + validation errors).
+	getPlaybook: (id) => {
+		return playbookRegistry.get(id);
+	},
+
+	// Create or update a playbook. With `id` it patches; without, it creates a
+	// new draft. Returns the stored playbook (with { valid, errors }).
+	savePlaybook: (args) => {
+		const opts = args || {};
+
+		if (opts.id && playbookRegistry.get(opts.id)) {
+			return playbookRegistry.update(opts.id, { name: opts.name, yaml: opts.yaml, schedule: opts.schedule });
+		}
+
+		return playbookRegistry.create(opts);
+	},
+
+	// Transition a playbook: draft | active | paused. Activating an invalid
+	// playbook is refused.
+	setPlaybookState: (id, state) => {
+		try {
+			return playbookRegistry.setState(id, state);
+		} catch (error) {
+			return { error: error.message };
+		}
+	},
+
+	// Export a playbook as a portable artifact (name/schedule/yaml).
+	exportPlaybook: (id) => {
+		return playbookRegistry.export(id);
+	},
+
+	// Import a portable artifact (or a bare flow YAML string) as a new draft.
+	importPlaybook: (payload) => {
+		return playbookRegistry.import(payload);
 	}
 };
 

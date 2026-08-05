@@ -56,4 +56,57 @@ server.registerTool("query_entities", {
 	return asText(mcp.queryEntities(args));
 });
 
+server.registerTool("list_playbooks", {
+	title: "List playbooks",
+	description: "List playbooks and their lifecycle state (draft/active/paused).",
+	inputSchema: {}
+}, async () => {
+	return asText(mcp.listPlaybooks());
+});
+
+server.registerTool("get_playbook", {
+	title: "Get playbook",
+	description: "Get one playbook in full (YAML + validation errors) by id.",
+	inputSchema: { id: z.string() }
+}, async (args) => {
+	return asText(mcp.getPlaybook(args.id));
+});
+
+server.registerTool("save_playbook", {
+	title: "Save playbook",
+	description: "Create a new playbook (omit id) or update an existing one (with id). Returns { valid, errors }.",
+	inputSchema: {
+		id: z.string().optional(),
+		name: z.string().optional(),
+		yaml: z.string().optional(),
+		schedule: z.string().optional()
+	}
+}, async (args) => {
+	return asText(mcp.savePlaybook(args));
+});
+
+server.registerTool("set_playbook_state", {
+	title: "Set playbook state",
+	description: "Transition a playbook to draft | active | paused (activating an invalid playbook is refused).",
+	inputSchema: { id: z.string(), state: z.enum(["draft", "active", "paused"]) }
+}, async (args) => {
+	return asText(mcp.setPlaybookState(args.id, args.state));
+});
+
+server.registerTool("export_playbook", {
+	title: "Export playbook",
+	description: "Export a playbook as a portable artifact { name, schedule, yaml } for sharing/committing.",
+	inputSchema: { id: z.string() }
+}, async (args) => {
+	return asText(mcp.exportPlaybook(args.id));
+});
+
+server.registerTool("import_playbook", {
+	title: "Import playbook",
+	description: "Import a portable playbook artifact (or a bare flow YAML string) as a new draft.",
+	inputSchema: { name: z.string().optional(), schedule: z.string().optional(), yaml: z.string() }
+}, async (args) => {
+	return asText(mcp.importPlaybook(args));
+});
+
 server.connect(new StdioServerTransport());

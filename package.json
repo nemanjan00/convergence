@@ -11,6 +11,8 @@
 		"flow-watch": "nodemon bin/run.js",
 		"monitor": "forever bin/monitor.js",
 		"monitor-watch": "nodemon bin/monitor.js",
+		"playbooks": "forever bin/monitor.js --playbooks",
+		"playbooks-watch": "nodemon bin/monitor.js --playbooks",
 		"export": "node bin/export.js",
 		"mcp": "node bin/mcp.mjs",
 		"frontend:verify": "node frontend/__tests__/verify.mjs",

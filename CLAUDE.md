@@ -69,6 +69,7 @@ yarn flow    # load, validate, and RUN examples/flows/ct-recon.yaml (live)
 yarn export  # run + serialize entities/provenance/edges/executions (JSON)
 yarn mcp     # AI-facing MCP server (stdio)
 yarn monitor # re-run a flow on a cron (MONITOR_CRON) — watch over time
+yarn playbooks # run every ACTIVE playbook on a cron (draft/active/paused)
 yarn test    # jest
 yarn lint    # eslint (flat config)
 ```

@@ -126,6 +126,36 @@ module.exports = (mongoUrl, dbName) => {
 			});
 		},
 
+		// Persist the playbook registry (keyed by id) to a `playbooks` collection,
+		// so the set of flows + their draft/active/paused state survives restarts.
+		savePlaybooks: (playbooks) => {
+			const books = playbooks.all();
+
+			if (books.length === 0) {
+				return Promise.resolve();
+			}
+
+			return persistence._db().then((db) => {
+				const ops = books.map((book) => {
+					return db.collection("playbooks").updateOne(
+						{ _id: book.id },
+						{ $set: book },
+						{ upsert: true }
+					);
+				});
+
+				return Promise.all(ops);
+			});
+		},
+
+		loadPlaybooks: (playbooks) => {
+			return persistence._db().then((db) => {
+				return db.collection("playbooks").find({}).toArray().then((docs) => {
+					playbooks.hydrate(docs);
+				});
+			});
+		},
+
 		close: () => {
 			if (!persistence._client) {
 				return Promise.resolve();
