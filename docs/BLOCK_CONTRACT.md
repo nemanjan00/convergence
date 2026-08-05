@@ -88,21 +88,33 @@ consistent shape so they compose and stay cheap at scale:
 - **Lazy-load ESM deps.** Use `src/utils/load` for pure-ESM libraries
   (`node-rdap-*`, fingerprinters) so CommonJS blocks need no build step.
 
-### Building blocks to port (existing toolkit → `src/services` / `src/utils`)
+### Ported toolkit (existing recon primitives, now in house style)
 
-These already exist in house style and become blocks/utils under the contract:
+These are in-repo, lint-clean, and (where offline-testable) unit-tested. They
+become the backing services for real blocks under the contract.
 
-| Piece | Becomes | Role |
-| --- | --- | --- |
-| rdap + redis cache | `services/rdap` | registrar/abuse/range for IP or domain |
-| asn resolver | `services/asn` | IP → ASN + announced prefix |
-| ip-lookup (batch) | `block enrich.ip` | batched IP → {asn, prefix, whois}, 1wk cache |
-| random DNS resolver | `services/resolver` | rotating-server, bogus-IP-filtered DNS |
-| dns retry | `utils/retry` | TTL-bounded retry wrapper |
-| useragent manager | `utils/useragent` | coverage-weighted realistic UA rotation |
-| balancer | `utils/balancer` | weighted-random pool (rotation primitive) |
-| nearest-country | `utils/geo` | pick closest available proxy country |
-| lazy `load()` | `utils/load` | use ESM-only libs from CJS (done) |
+| Piece | Location | Role | Status |
+| --- | --- | --- | --- |
+| lazy `load()` | `utils/load` | use ESM-only libs from CJS (lazy import) | ✅ done |
+| balancer | `utils/balancer` | weighted-random pool (rotation primitive) | ✅ tested |
+| ip | `utils/ip` | mask + enumerate containing nets (v4/v6) | ✅ tested |
+| subnet | `utils/subnet` | VLSM subnet layout | ✅ tested |
+| geo | `utils/geo` | nearest available proxy country | ✅ tested |
+| retry | `utils/retry` | TTL-bounded retry wrapper | ✅ tested |
+| random-ip | `utils/random-ip` | random egress IP in owned ranges (v4/v6) | ✅ tested |
+| useragent | `utils/useragent` | coverage-weighted realistic UA rotation | ✅ loads |
+| dns-cache | `utils/dns-cache` | process-local caching lookup (net.connect compat) | ✅ done |
+| cache | `services/cache` | Redis or in-memory fallback (get/mget/msetEx) | ✅ tested |
+| resolver | `services/resolver` | rotating-server, bogus-filtered DNS | ✅ loads |
+| dns-picker | `services/dns-picker` | IPv6-preferring address picker | ✅ loads |
+| asn | `services/asn` | IP → ASN + prefix (Team Cymru bulk whois) | ✅ loads |
+| rdap | `services/rdap` | registrar/abuse/range, cached; needs node-rdap-lacnic | ✅ loads |
+| ip-lookup | `services/ip-lookup` | batched IP → {asn, prefix, whois}, 1wk cache | ✅ loads |
+| ip-country | `services/ip-country` | IP → country via country-ip-blocks | ✅ tested |
+
+"loads" = requires cleanly and is wired; live behavior needs network/data (see
+`docs/DATA_SOURCES.md`). Next: wrap these as contract blocks (a block adapts a
+service's method into the work-item/result envelope) and add the CT-log source.
 
 ## Why this shrinks AI error surface
 

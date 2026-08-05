@@ -19,6 +19,7 @@ module.exports = [
 				module: "writable",
 				process: "readonly",
 				console: "readonly",
+				Buffer: "readonly",
 				setTimeout: "readonly",
 				setInterval: "readonly",
 				clearTimeout: "readonly",

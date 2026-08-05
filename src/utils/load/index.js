@@ -8,9 +8,16 @@
 //   whois(ip).then(...)
 
 const load = (name, exportName) => {
-	const modulePromise = import(name);
+	// Import lazily on first call (and only once), so requiring a block that
+	// depends on an uninstalled ESM package does not throw at load time — it
+	// only fails if actually invoked.
+	let modulePromise;
 
 	return (...args) => {
+		if (!modulePromise) {
+			modulePromise = import(name);
+		}
+
 		return modulePromise.then((imported) => {
 			const target = exportName ? imported[exportName] : imported;
 

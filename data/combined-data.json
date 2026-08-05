@@ -1,0 +1,14 @@
+{
+	"US": { "latitude_precise": 37.0902, "longitude_precise": -95.7129 },
+	"CA": { "latitude_precise": 56.1304, "longitude_precise": -106.3468 },
+	"GB": { "latitude_precise": 55.3781, "longitude_precise": -3.436 },
+	"DE": { "latitude_precise": 51.1657, "longitude_precise": 10.4515 },
+	"FR": { "latitude_precise": 46.2276, "longitude_precise": 2.2137 },
+	"NL": { "latitude_precise": 52.1326, "longitude_precise": 5.2913 },
+	"RS": { "latitude_precise": 44.0165, "longitude_precise": 21.0059 },
+	"SG": { "latitude_precise": 1.3521, "longitude_precise": 103.8198 },
+	"JP": { "latitude_precise": 36.2048, "longitude_precise": 138.2529 },
+	"AU": { "latitude_precise": -25.2744, "longitude_precise": 133.7751 },
+	"BR": { "latitude_precise": -14.235, "longitude_precise": -51.9253 },
+	"ZA": { "latitude_precise": -30.5595, "longitude_precise": 22.9375 }
+}
