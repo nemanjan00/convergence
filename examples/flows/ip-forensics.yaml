@@ -1,0 +1,82 @@
+# Forensics enrichment — see docs/FLOW_SPEC.md.
+# Malware analysis hands us a list of IPs, each with per-IP key/value metadata.
+# The list source seeds them as `ip` entities (metadata rides along, provenanced
+# to the analysis); enrichment adds network owner, ASN, geo, open ports, and
+# reverse-DNS. A PTR name is a typed field that materializes a `host` entity
+# (ip --ptr--> host), so the graph grows from each IP outward.
+apiVersion: v0
+kind: Flow
+metadata:
+  name: ip-forensics
+  description: Enrich a list of IPs (with analyst metadata) into a graph.
+
+entities:
+  ip:
+    key: [address]
+    fields:
+      hostname:                        # a PTR name -> materialize+link a host
+        links: host
+        as: name
+        rel: ptr
+  host:
+    key: [name]
+
+sources:
+  - id: analysis
+    block: source.list
+    emits: ip
+    params:
+      items:
+        - { address: "1.1.1.1", tag: c2, family: demo-loader, first_seen: "2026-01-02" }
+        - { address: "8.8.8.8", tag: resolver, family: demo-loader, first_seen: "2026-01-03" }
+        - { address: "216.24.57.7", tag: panel, family: demo-loader, first_seen: "2026-01-04" }
+
+blocks:
+  # Network owner (RDAP over HTTP).
+  - id: whois
+    uses: rdap
+    for_each: ip
+    when: { ip.network: { $exists: false } }
+    inputs: { ip: "{{ ip.address }}" }
+    merge_into: ip
+    rate: { max_per_min: 120 }
+
+  # Geolocation + hosting org.
+  - id: geo
+    uses: ip.geo
+    for_each: ip
+    when: { ip.country: { $exists: false } }
+    inputs: { address: "{{ ip.address }}" }
+    merge_into: ip
+
+  # ASN (Team Cymru; tolerant if port-43 is firewalled).
+  - id: asn
+    uses: ip.asn
+    for_each: ip
+    when: { ip.asn: { $exists: false } }
+    inputs: { address: "{{ ip.address }}" }
+    merge_into: ip
+
+  # Reverse-DNS -> PTR name (materializes a host entity via the typed field).
+  - id: reverse
+    uses: ip.reverse
+    for_each: ip
+    when: { ip.hostname: { $exists: false } }
+    inputs: { address: "{{ ip.address }}" }
+    merge_into: ip
+
+  # Port scan the IP directly.
+  - id: scan
+    uses: port.scan
+    for_each: ip
+    when: { ip.open_ports: { $exists: false } }
+    inputs: { target: "{{ ip.address }}" }
+    merge_into: ip
+
+  # The PTR-discovered host gets its own web check.
+  - id: title
+    uses: http.title
+    for_each: host
+    when: { host.http_status: { $exists: false } }
+    inputs: { url: "https://{{ host.name }}" }
+    merge_into: host

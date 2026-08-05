@@ -16,6 +16,8 @@ const BLOCK_MODULES = [
 	"./http-title",
 	"./rdap",
 	"./asn",
+	"./ip-geo",
+	"./ip-reverse",
 	"./mail-mx",
 	"./mail-auth",
 	"./ip-country",

@@ -3,9 +3,11 @@
 // Mirrors src/blocks for symmetry.
 
 const ctLog = require("./ct-log");
+const list = require("./list");
 
 const BUILTIN = [
-	ctLog
+	ctLog,
+	list
 ];
 
 const sources = {

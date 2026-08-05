@@ -10,7 +10,10 @@ const path = require("path");
 const execSync = require("child_process").execSync;
 
 const root = path.join(__dirname, "..");
-const outDir = path.join(root, "frontend", "dist");
+const outFile = process.env.OUT
+	? path.resolve(root, process.env.OUT)
+	: path.join(root, "frontend", "dist", "index.html");
+const outDir = path.dirname(outFile);
 
 const bundle = execSync(
 	"npx esbuild frontend/entry.js --bundle --format=iife --minify",
@@ -35,6 +38,6 @@ const html = "<style>\n" + css + "\n</style>\n" +
 	"<script>" + safe(bundle) + "</script>\n";
 
 fs.mkdirSync(outDir, { recursive: true });
-fs.writeFileSync(path.join(outDir, "index.html"), html);
+fs.writeFileSync(outFile, html);
 
-console.log("wrote frontend/dist/index.html (" + html.length + " bytes)");
+console.log("wrote " + outFile + " (" + html.length + " bytes)");
