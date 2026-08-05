@@ -40,7 +40,8 @@ const data = {
 		{ id: "x3", playbook: "pb-1", sweep: 2, block: "resolve", uses: "dns.a", entity: { type: "host", key: "name=\"b.example.com\"" }, status: "skipped", changed: false }
 	],
 	playbooks: [ { id: "pb-1", name: "ct-recon", state: "active", valid: true, schedule: null, last_run_at: null, yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" } ],
-	samples: [ { name: "ct-recon", description: "CT recon sample", yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" } ]
+	samples: [ { name: "ct-recon", description: "CT recon sample", yaml: "apiVersion: v0\nkind: Flow\nmetadata:\n  name: ct-recon\n" } ],
+	library: { blocks: [{ uses: "http.title" }, { uses: "dns.a" }, { uses: "tls.cert" }], sources: [{ source: "source.ct-log" }] }
 };
 
 const failures = [];
@@ -107,6 +108,19 @@ relationInput.value = "verified_edit";
 relationInput.dispatchEvent(new window.Event("input", { bubbles: true }));
 if (document.querySelector("pre.yaml").textContent.indexOf("verified_edit") === -1) {
 	failures.push("builder: block edit did not round-trip into YAML");
+}
+
+// palette: adding a block adds a node to the canvas + lands in the YAML
+const palItem = q(".pal-item").find((b) => b.textContent.indexOf("tls.cert") !== -1);
+if (!palItem) {
+	failures.push("builder: tls.cert palette item not rendered");
+} else {
+	const beforeNodes = q(".gnode").length;
+	click(palItem);
+	if (q(".gnode").length <= beforeNodes) { failures.push("builder: adding a palette block did not add a node"); }
+	if (document.querySelector("pre.yaml").textContent.indexOf("tls.cert") === -1) {
+		failures.push("builder: added block not reflected in YAML");
+	}
 }
 
 // no overlap in the builder layout

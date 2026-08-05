@@ -517,10 +517,38 @@ const BLOCK_ICONS = {
 const blockIcon = (uses) => { return BLOCK_ICONS[String(uses || "").split(".")[0]] || "◆"; };
 
 const builder = (data, ui) => {
-	const graph = ui.graph;
+	// Structural changes (add/delete a block) bump ui.topo so the node layer
+	// rebuilds from the recomputed graph; drags only bump ui.frame (positions).
+	const stageW = () => { ui.topo; ui.frame; return Math.max.apply(null, ui.graph.nodes.map((n) => { return (ui.pos[n.id] ? ui.pos[n.id].x : 0) + NODE_W + 60; }).concat([420])); };
+	const stageH = () => { ui.topo; ui.frame; return Math.max.apply(null, ui.graph.nodes.map((n) => { return (ui.pos[n.id] ? ui.pos[n.id].y : 0) + NODE_H + 60; }).concat([320])); };
 
-	const stageW = () => { ui.frame; return Math.max.apply(null, graph.nodes.map((n) => ui.pos[n.id].x + NODE_W + 60)); };
-	const stageH = () => { ui.frame; return Math.max.apply(null, graph.nodes.map((n) => ui.pos[n.id].y + NODE_H + 60)); };
+	const recompute = () => {
+		ui.graph = computeGraph(ui.spec);
+		const laid = builderLayout(ui.graph, ui.narrow);
+		ui.graph.nodes.forEach((n) => { if (!ui.pos[n.id]) { ui.pos[n.id] = laid[n.id]; } });
+		ui.topo = ui.topo + 1;
+		ui.frame = ui.frame + 1;
+	};
+
+	const addBlock = (uses) => {
+		const ents = Object.keys(ui.spec.entities || {});
+		const target = ents.indexOf("host") !== -1 ? "host" : (ents[0] || "host");
+		const base = "b-" + String(uses).replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/-+$/, "");
+		const ids = new Set((ui.spec.blocks || []).map((b) => { return b.id; }));
+		let id = base;
+		let n = 1;
+		while (ids.has(id)) { n = n + 1; id = base + "-" + n; }
+
+		ui.spec.blocks = (ui.spec.blocks || []).concat([{ id: id, uses: uses, for_each: target, merge_into: target, inputs: {} }]);
+		ui.block = id;
+		recompute();
+	};
+
+	const deleteBlock = (id) => {
+		ui.spec.blocks = (ui.spec.blocks || []).filter((b) => { return b.id !== id; });
+		if (ui.block === id) { ui.block = null; }
+		recompute();
+	};
 
 	const wires = el("svg", { class: "wires", width: stageW, height: stageH },
 		el("defs", {},
@@ -529,10 +557,9 @@ const builder = (data, ui) => {
 				markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse"
 			}, el("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--wire)" }))
 		),
-		// Reactive edge layer: recomputed when topology (for_each/merge_into) or
-		// positions change.
+		// Reactive edge layer: recomputed on topology (add/delete) or position change.
 		() => {
-			ui.frame;
+			ui.frame; ui.topo;
 
 			const edges = edgesFromSpec(ui.spec).filter((e) => ui.pos[e.from] && ui.pos[e.to]);
 
@@ -546,15 +573,15 @@ const builder = (data, ui) => {
 		}
 	);
 
-	const nodeEls = graph.nodes.map((node) => {
+	const nodeEl = (node) => {
 		const b = node.meta.block;
 
 		return el("div", {
 			class: () => "gnode " + node.kind + (node.kind === "block" && ui.block === b.id ? " sel" : ""),
-			style: () => { ui.frame; const p = ui.pos[node.id]; return "left:" + p.x + "px;top:" + p.y + "px"; },
+			style: () => { ui.frame; const p = ui.pos[node.id] || { x: 0, y: 0 }; return "left:" + p.x + "px;top:" + p.y + "px"; },
 			onpointerdown: (e) => {
-				if (node.kind === "block") { ui.block = b.id; }
-				ui.drag = { id: node.id, px: e.clientX, py: e.clientY, ox: ui.pos[node.id].x, oy: ui.pos[node.id].y };
+				if (node.kind === "block") { ui.block = b.id; ui.frame = ui.frame + 1; }
+				ui.drag = { id: node.id, px: e.clientX, py: e.clientY, ox: (ui.pos[node.id] || {}).x || 0, oy: (ui.pos[node.id] || {}).y || 0 };
 				e.preventDefault();
 			}
 		},
@@ -577,11 +604,31 @@ const builder = (data, ui) => {
 
 			return el("span", { class: "row-badges" }, m);
 		}));
-	});
+	};
 
 	const canvas = el("div", { class: "canvas" },
-		el("div", { class: "stage", style: () => { ui.frame; return "width:" + stageW() + "px;height:" + stageH() + "px"; } },
-			wires, nodeEls));
+		el("div", { class: "stage", style: () => { ui.frame; ui.topo; return "width:" + stageW() + "px;height:" + stageH() + "px"; } },
+			wires,
+			el("div", {}, () => { ui.topo; return ui.graph.nodes.map(nodeEl); })));
+
+	// Block palette — search + click to add (icons per category). Fed by the
+	// snapshot's block library.
+	const palette = el("div", {},
+		el("input", { class: "search", type: "search", placeholder: "add a block…", oninput: (e) => { ui.palQuery = e.target.value; ui.frame = ui.frame + 1; } }),
+		el("div", { class: "palette" }, () => {
+			ui.frame;
+			const lib = (data.library && data.library.blocks) || [];
+
+			if (lib.length === 0) { return el("p", { class: "muted" }, "block library unavailable (the served app provides it)"); }
+
+			const qy = String(ui.palQuery || "").toLowerCase();
+			const items = lib.map((b) => { return b.uses; }).filter((u) => { return u.toLowerCase().indexOf(qy) !== -1; }).sort();
+
+			return el("div", {}, items.map((uses) => {
+				return el("button", { class: "pal-item", title: "add " + uses, onclick: () => { addBlock(uses); } },
+					el("span", { class: "pal-ico" }, blockIcon(uses)), el("span", {}, uses));
+			}));
+		}));
 
 	// Editable inspector — re-rendered only when the SELECTED block changes (so
 	// typing never loses focus). Edits mutate the spec + bump frame; YAML, wires,
@@ -622,19 +669,23 @@ const builder = (data, ui) => {
 		});
 
 		return el("div", { class: "editor" },
+			el("div", { class: "editor-head" }, el("span", { class: "ico" }, blockIcon(block.uses)), el("span", {}, block.id)),
 			field("uses", el("input", { class: "in", value: block.uses, oninput: (e) => { block.uses = e.target.value; ui.frame = ui.frame + 1; } })),
 			field("for_each", el("select", { class: "in", onchange: (e) => { block.for_each = e.target.value; ui.frame = ui.frame + 1; } }, options(block.for_each))),
 			field("merge_into", el("select", { class: "in", onchange: (e) => { block.merge_into = e.target.value; ui.frame = ui.frame + 1; } }, options(block.merge_into))),
 			field("relation", el("input", { class: "in", value: block.relation || "", oninput: (e) => { const v = e.target.value.trim(); if (v) { block.relation = v; } else { delete block.relation; } ui.frame = ui.frame + 1; } })),
 			jsonField("when (sift query)", block, "when"),
 			jsonField("inputs", block, "inputs"),
-			jsonField("rate", block, "rate"));
+			jsonField("rate", block, "rate"),
+			el("button", { class: "btn", title: "remove this block", onclick: () => { deleteBlock(block.id); } }, "🗑 delete block"));
 	};
 
 	return el("div", { class: "panel builder" },
-		el("div", { class: "hint" }, "source → blocks → entities · in-place enrichment loops on its entity · drag to arrange · click a block to edit"),
+		el("div", { class: "hint" }, "source → blocks → entities · in-place enrichment loops on its entity · drag to arrange · click a block to edit · add blocks from the palette →"),
 		canvas,
 		el("div", { class: "side" },
+			el("h3", {}, "add block"),
+			palette,
 			el("h3", {}, "edit block"),
 			el("div", { class: "inspector" }, when(() => ui.block, () => editor())),
 			el("h3", {}, "flow yaml (live)"),
@@ -1313,6 +1364,8 @@ export const render = (root, data) => {
 		exploreMode: "tree",
 		expanded: {},
 		block: null,
+		topo: 0,
+		palQuery: "",
 		graph: graph,
 		pos: builderLayout(graph, narrow),
 		spec: data.spec,

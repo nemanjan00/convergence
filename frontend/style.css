@@ -409,6 +409,18 @@ h3 { margin: 6px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing
 .badge.out { color: var(--k-entity); border-color: color-mix(in srgb, var(--k-entity) 42%, transparent); }
 .badge.rel { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 
+/* builder: block palette + editor head */
+.palette { max-height: 220px; overflow: auto; display: flex; flex-direction: column; gap: 3px; margin: 6px 0 4px; }
+.pal-item {
+	display: flex; align-items: center; gap: 9px; text-align: left; cursor: pointer;
+	background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px;
+	padding: 6px 10px; color: var(--text); font: inherit; font-size: 12.5px; font-family: var(--mono);
+}
+.pal-item:hover { border-color: var(--accent); color: var(--accent); }
+.pal-ico { width: 18px; text-align: center; }
+.editor-head { display: flex; align-items: center; gap: 8px; font-weight: 650; font-size: 13.5px; padding-bottom: 4px; }
+.editor-head .ico { font-size: 15px; }
+
 .editor { display: flex; flex-direction: column; gap: 10px; }
 .field { display: flex; flex-direction: column; gap: 4px; }
 .field > label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--dim); }
