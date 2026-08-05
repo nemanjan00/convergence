@@ -8,6 +8,12 @@
 // (frontend/__tests__), which is how the UI is verified without a browser.
 
 import { state, el, list, when } from "@nemanjan00/qrp";
+import { dump as dumpYamlLib } from "js-yaml";
+
+const dumpYaml = (spec) => {
+	// Serialize a plain clone so js-yaml never sees the reactive proxy.
+	return dumpYamlLib(JSON.parse(JSON.stringify(spec)));
+};
 
 const NODE_W = 184;
 const NODE_H = 62;
@@ -190,17 +196,37 @@ const wirePath = (a, b) => {
 	return "M " + sx + "," + sy + " C " + (sx + dx) + "," + sy + " " + (ex - dx) + "," + ey + " " + ex + "," + ey;
 };
 
+// Edges from the CURRENT (editable) spec. In-place enrichment
+// (for_each === merge_into) draws ONE input wire — the write-back is an implicit
+// self-loop shown as a badge, not an ugly backward-crossing wire. A real
+// derivation (fanout: cert -> host) draws the forward output wire too.
+const edgesFromSpec = (spec) => {
+	const edges = [];
+
+	(spec.sources || []).forEach((s) => {
+		edges.push({ from: "S:" + s.id, to: "E:" + s.emits });
+	});
+
+	(spec.blocks || []).forEach((b) => {
+		edges.push({ from: "E:" + b.for_each, to: "B:" + b.id, hot: b.id });
+
+		if (b.merge_into !== b.for_each) {
+			edges.push({ from: "B:" + b.id, to: "E:" + b.merge_into, rel: b.relation, hot: b.id });
+		}
+	});
+
+	return edges;
+};
+
+const field = (label, control) => {
+	return el("div", { class: "field" }, el("label", {}, label), control);
+};
+
 const builder = (data, ui) => {
 	const graph = ui.graph;
 
-	const stageW = () => {
-		ui.frame;
-		return Math.max.apply(null, graph.nodes.map((n) => ui.pos[n.id].x + NODE_W + 60));
-	};
-	const stageH = () => {
-		ui.frame;
-		return Math.max.apply(null, graph.nodes.map((n) => ui.pos[n.id].y + NODE_H + 60));
-	};
+	const stageW = () => { ui.frame; return Math.max.apply(null, graph.nodes.map((n) => ui.pos[n.id].x + NODE_W + 60)); };
+	const stageH = () => { ui.frame; return Math.max.apply(null, graph.nodes.map((n) => ui.pos[n.id].y + NODE_H + 60)); };
 
 	const wires = el("svg", { class: "wires", width: stageW, height: stageH },
 		el("defs", {},
@@ -209,45 +235,32 @@ const builder = (data, ui) => {
 				markerWidth: "7", markerHeight: "7", orient: "auto-start-reverse"
 			}, el("path", { d: "M0,0 L10,5 L0,10 z", fill: "var(--wire)" }))
 		),
-		graph.edges.map((edge) => {
-			return el("path", {
-				class: () => {
-					const hot = ("B:" + ui.block) === edge.from || ("B:" + ui.block) === edge.to;
-					return hot ? "wire hot" : "wire";
-				},
-				"marker-end": "url(#arrow)",
-				d: () => {
-					ui.frame;
-					return wirePath(ui.pos[edge.from], ui.pos[edge.to]);
-				}
-			});
-		})
+		// Reactive edge layer: recomputed when topology (for_each/merge_into) or
+		// positions change.
+		() => {
+			ui.frame;
+
+			const edges = edgesFromSpec(ui.spec).filter((e) => ui.pos[e.from] && ui.pos[e.to]);
+
+			return el("g", {}, edges.map((edge) => {
+				return el("path", {
+					class: () => (ui.block === edge.hot ? "wire hot" : "wire"),
+					"marker-end": "url(#arrow)",
+					d: () => { ui.frame; return wirePath(ui.pos[edge.from], ui.pos[edge.to]); }
+				});
+			}));
+		}
 	);
 
 	const nodeEls = graph.nodes.map((node) => {
 		const b = node.meta.block;
 
-		const meta = [];
-		if (node.kind === "source") { meta.push(el("span", { class: "badge" }, "emits " + node.meta.emits)); }
-		if (b) {
-			meta.push(el("span", { class: "badge" }, "for " + b.for_each));
-			if (b.relation) { meta.push(el("span", { class: "badge rel" }, b.relation)); }
-		}
-
 		return el("div", {
 			class: () => "gnode " + node.kind + (node.kind === "block" && ui.block === b.id ? " sel" : ""),
-			style: () => {
-				ui.frame;
-				const p = ui.pos[node.id];
-				return "left:" + p.x + "px;top:" + p.y + "px";
-			},
+			style: () => { ui.frame; const p = ui.pos[node.id]; return "left:" + p.x + "px;top:" + p.y + "px"; },
 			onmousedown: (e) => {
 				if (node.kind === "block") { ui.block = b.id; }
-				ui.drag = {
-					id: node.id,
-					px: e.clientX, py: e.clientY,
-					ox: ui.pos[node.id].x, oy: ui.pos[node.id].y
-				};
+				ui.drag = { id: node.id, px: e.clientX, py: e.clientY, ox: ui.pos[node.id].x, oy: ui.pos[node.id].y };
 				e.preventDefault();
 			}
 		},
@@ -255,31 +268,83 @@ const builder = (data, ui) => {
 		el("div", { class: "port out" }),
 		el("div", { class: "kind" }, node.kind),
 		el("div", { class: "title" }, node.title),
-		el("div", { class: "sub" }, node.sub),
-		meta.length ? el("div", { class: "meta" }, meta) : "");
+		el("div", { class: "sub" }, node.kind === "block" ? (() => { ui.frame; return b.uses; }) : node.sub),
+		el("div", { class: "meta" }, () => {
+			ui.frame;
+			const m = [];
+
+			if (node.kind === "source") { m.push(el("span", { class: "badge" }, "emits " + node.meta.emits)); }
+
+			if (b) {
+				m.push(el("span", { class: "badge in" }, "for " + b.for_each));
+				m.push(el("span", { class: "badge out" }, "→ " + b.merge_into));
+				if (b.relation) { m.push(el("span", { class: "badge rel" }, b.relation)); }
+			}
+
+			return el("span", { class: "row-badges" }, m);
+		}));
 	});
 
 	const canvas = el("div", { class: "canvas" },
 		el("div", { class: "stage", style: () => { ui.frame; return "width:" + stageW() + "px;height:" + stageH() + "px"; } },
 			wires, nodeEls));
 
-	const inspector = el("div", { class: "inspector" }, () => {
-		const block = (data.spec.blocks || []).find((x) => x.id === ui.block);
+	// Editable inspector — re-rendered only when the SELECTED block changes (so
+	// typing never loses focus). Edits mutate the spec + bump frame; YAML, wires,
+	// and badges follow live.
+	const jsonField = (label, block, key) => {
+		const err = state({ msg: "" });
+
+		return el("div", { class: "field" },
+			el("label", {}, label),
+			el("textarea", {
+				spellcheck: "false",
+				oninput: (e) => {
+					const text = e.target.value.trim();
+
+					if (text === "") { delete block[key]; err.msg = ""; ui.frame = ui.frame + 1; return; }
+
+					try {
+						block[key] = JSON.parse(text);
+						err.msg = "";
+						ui.frame = ui.frame + 1;
+					} catch {
+						err.msg = "invalid JSON — not applied";
+					}
+				}
+			}, JSON.stringify(block[key] || {}, null, 2)),
+			() => (err.msg ? el("div", { class: "err" }, err.msg) : ""));
+	};
+
+	const editor = () => {
+		const block = (ui.spec.blocks || []).find((x) => x.id === ui.block);
 
 		if (!block) {
-			return el("p", { class: "muted" }, "drag nodes to arrange · click a block to inspect");
+			return el("p", { class: "muted" }, "drag nodes to arrange · click a block to edit it");
 		}
 
-		return el("pre", {}, JSON.stringify(block, null, 2));
-	});
+		const options = (current) => Object.keys(ui.spec.entities || {}).map((t) => {
+			return el("option", { value: t, selected: t === current }, t);
+		});
+
+		return el("div", { class: "editor" },
+			field("uses", el("input", { class: "in", value: block.uses, oninput: (e) => { block.uses = e.target.value; ui.frame = ui.frame + 1; } })),
+			field("for_each", el("select", { class: "in", onchange: (e) => { block.for_each = e.target.value; ui.frame = ui.frame + 1; } }, options(block.for_each))),
+			field("merge_into", el("select", { class: "in", onchange: (e) => { block.merge_into = e.target.value; ui.frame = ui.frame + 1; } }, options(block.merge_into))),
+			field("relation", el("input", { class: "in", value: block.relation || "", oninput: (e) => { const v = e.target.value.trim(); if (v) { block.relation = v; } else { delete block.relation; } ui.frame = ui.frame + 1; } })),
+			jsonField("when (sift query)", block, "when"),
+			jsonField("inputs", block, "inputs"),
+			jsonField("rate", block, "rate"));
+	};
 
 	return el("div", { class: "panel builder" },
-		el("div", { class: "hint" }, "source → blocks → entities · wired by for_each / merge_into · drag to arrange"),
+		el("div", { class: "hint" }, "source → blocks → entities · in-place enrichment loops on its entity · drag to arrange · click a block to edit"),
 		canvas,
 		el("div", { class: "side" },
-			el("h3", {}, "inspector"), inspector,
-			el("h3", {}, "flow yaml"),
-			el("pre", { class: "yaml scroll" }, data.yaml || "")));
+			el("h3", {}, "edit block"),
+			el("div", { class: "inspector" }, when(() => ui.block, () => editor())),
+			el("h3", {}, "flow yaml (live)"),
+			el("pre", { class: "yaml scroll" }, () => { ui.frame; return dumpYaml(ui.spec); })));
 };
 
 // --- Shell ----------------------------------------------------------------
@@ -295,6 +360,7 @@ export const render = (root, data) => {
 		block: null,
 		graph: graph,
 		pos: graph.pos,
+		spec: data.spec,
 		frame: 0,
 		drag: null
 	});
