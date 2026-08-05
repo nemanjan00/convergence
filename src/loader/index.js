@@ -213,6 +213,7 @@ const loader = {
 				block: source.block,
 				emits: source.emits,
 				filter: source.filter,
+				params: source.params || {},
 				pull: opts.sourcePull || (() => {
 					return Promise.resolve([]);
 				})

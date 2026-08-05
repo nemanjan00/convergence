@@ -1,34 +1,62 @@
-// IP address helper (v4 + v6). Wraps ipaddr.js to mask an address to a prefix
-// length and to enumerate every containing network — used for matching an IP
-// against whois/ASN ranges and for range-oriented recon.
+// IP address framework (v4 + v6). Central to recon: mask, enumerate containing
+// networks, test subnet membership, and answer "does this range contain that
+// address". Accepts a bare address ("1.2.3.4", "2606:4700::1") or a CIDR
+// ("1.2.3.0/24"). Wraps ipaddr.js.
 //
-// Usage:
-//   const addr = ip("93.184.216.34");
-//   addr.mask(24);   // -> "93.184.216.0"
-//   addr.nets();     // -> ["93.184.216.34/1", ... , ".../32"]
+//   ip("93.184.216.34").mask(24)                 // "93.184.216.0"
+//   ip("93.184.216.34").isInSubnet("93.184.216.0/24")  // true
+//   ip("93.184.216.0/24").contains("93.184.216.5")     // true
+//   ip("93.184.216.34").nets()                   // ["…/1", …, "…/32"]
 
 const ipUtil = require("ipaddr.js");
 
-module.exports = (realIp) => {
+module.exports = (input) => {
 	const ip = {
 		_kind: undefined,
 		_buffer: undefined,
 		_parsed: undefined,
+		_prefix: undefined, // set when constructed from a CIDR
 
 		_init: (value) => {
-			const parsed = ipUtil.parse(value);
+			if (String(value).indexOf("/") !== -1) {
+				const parts = ipUtil.parseCIDR(value);
+				ip._parsed = parts[0];
+				ip._prefix = parts[1];
+			} else {
+				ip._parsed = ipUtil.parse(value);
+			}
 
-			ip._kind = parsed.kind();
-			ip._buffer = Buffer.from(parsed.toByteArray());
-			ip._parsed = parsed;
+			ip._kind = ip._parsed.kind();
+			ip._buffer = Buffer.from(ip._parsed.toByteArray());
 		},
 
 		kind: () => {
 			return ip._kind;
 		},
 
+		version: () => {
+			return ip._kind === "ipv6" ? 6 : 4;
+		},
+
+		isV4: () => {
+			return ip._kind === "ipv4";
+		},
+
+		isV6: () => {
+			return ip._kind === "ipv6";
+		},
+
+		// Prefix length when built from a CIDR, else null.
+		prefix: () => {
+			return ip._prefix === undefined ? null : ip._prefix;
+		},
+
 		toString: () => {
 			return ip._parsed.toString();
+		},
+
+		toByteArray: () => {
+			return Array.from(ip._buffer);
 		},
 
 		// Zero out all bits below the given prefix length.
@@ -52,6 +80,13 @@ module.exports = (realIp) => {
 			return ipUtil.fromByteArray(Array.from(buffer)).toString();
 		},
 
+		// Network address for this CIDR (or /full-length when bare).
+		network: () => {
+			const bits = ip._prefix === undefined ? ip._buffer.length * 8 : ip._prefix;
+
+			return ip.mask(bits);
+		},
+
 		// Every containing network, from /1 down to the full address length.
 		nets: () => {
 			const bits = ip._buffer.length * 8;
@@ -59,10 +94,36 @@ module.exports = (realIp) => {
 			return Array(bits).fill(true).map((_flag, key) => {
 				return ip.mask(key + 1) + "/" + (key + 1);
 			});
+		},
+
+		// Is this address inside the given CIDR? (false across families.)
+		isInSubnet: (cidr) => {
+			const parts = ipUtil.parseCIDR(cidr);
+
+			if (parts[0].kind() !== ip._kind) {
+				return false;
+			}
+
+			return ip._parsed.match(parts[0], parts[1]);
+		},
+
+		// Does this CIDR contain the given address? Requires a CIDR construction.
+		contains: (other) => {
+			if (ip._prefix === undefined) {
+				throw new Error("contains() requires a CIDR, e.g. ip(\"1.2.3.0/24\")");
+			}
+
+			const otherParsed = ipUtil.parse(other);
+
+			if (otherParsed.kind() !== ip._kind) {
+				return false;
+			}
+
+			return otherParsed.match(ip._parsed, ip._prefix);
 		}
 	};
 
-	ip._init(realIp);
+	ip._init(input);
 
 	return ip;
 };

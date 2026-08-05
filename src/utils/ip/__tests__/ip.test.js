@@ -19,4 +19,32 @@ describe("ip", () => {
 		expect(nets[23]).toBe("93.184.216.0/24");
 		expect(nets[31]).toBe("93.184.216.34/32");
 	});
+
+	it("reports version helpers", () => {
+		expect(ip("1.2.3.4").version()).toBe(4);
+		expect(ip("1.2.3.4").isV4()).toBe(true);
+		expect(ip("2606:4700::1").isV6()).toBe(true);
+	});
+
+	it("tests subnet membership", () => {
+		expect(ip("93.184.216.34").isInSubnet("93.184.216.0/24")).toBe(true);
+		expect(ip("93.184.217.1").isInSubnet("93.184.216.0/24")).toBe(false);
+		// cross-family is never a match
+		expect(ip("93.184.216.34").isInSubnet("2606:4700::/32")).toBe(false);
+	});
+
+	it("parses a CIDR and answers contains()", () => {
+		const range = ip("93.184.216.0/24");
+
+		expect(range.prefix()).toBe(24);
+		expect(range.network()).toBe("93.184.216.0");
+		expect(range.contains("93.184.216.5")).toBe(true);
+		expect(range.contains("93.184.217.5")).toBe(false);
+	});
+
+	it("throws contains() on a bare address", () => {
+		expect(() => {
+			return ip("1.2.3.4").contains("1.2.3.5");
+		}).toThrow(/requires a CIDR/);
+	});
 });

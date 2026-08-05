@@ -5,9 +5,11 @@
 // Register your own blocks the same way, or call runtime.registerBlock directly.
 
 const enrichCountry = require("./enrich-country");
+const enrichJs = require("./enrich-js");
 
 const BUILTIN = [
-	enrichCountry
+	enrichCountry,
+	enrichJs
 ];
 
 const blocks = {
