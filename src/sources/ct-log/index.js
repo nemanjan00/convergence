@@ -1,17 +1,44 @@
 // Source: source.ct-log — emit `cert` entities from Certificate Transparency
-// logs (via crt.sh). A source exposes pull(params) => Promise<item[]>; the
-// runtime feeds emitted items downstream (and applies the flow's `filter`).
+// logs. Queries providers in order (crt.sh, then CertSpotter) and uses the first
+// that returns results, so a crt.sh outage (frequent 502s) doesn't stop the
+// flow. A source exposes pull(params) => Promise<item[]>.
 //
 // params.match_domains: domains to query (each queried for its subdomains).
 //
-// NEEDS NETWORK to actually return data (crt.sh). The mapping is tested offline
-// via services/crtsh._map.
+// NEEDS NETWORK. Each provider's row->cert mapping is tested offline.
 
 const crtsh = require("../../services/crtsh");
+const certspotter = require("../../services/certspotter");
+
+// Provider fallback order.
+const PROVIDERS = [crtsh, certspotter];
 
 // Bound how many distinct hostnames a single pull enriches, so a domain with
 // hundreds of CT names stays demo-fast. Not silent: the drop is logged.
 const MAX_HOSTS = 12;
+
+// Try each provider until one returns certs; tolerate all failing (=> []).
+const searchWithFallback = (domain) => {
+	const tryProvider = (index) => {
+		if (index >= PROVIDERS.length) {
+			return Promise.resolve([]);
+		}
+
+		return PROVIDERS[index].search(domain).then((certs) => {
+			if (certs.length > 0) {
+				return certs;
+			}
+
+			return tryProvider(index + 1);
+		}).catch((error) => {
+			console.error("ct-log: " + PROVIDERS[index].name + " failed for " +
+				domain + " — " + error.message);
+			return tryProvider(index + 1);
+		});
+	};
+
+	return tryProvider(0);
+};
 
 module.exports = {
 	source: "source.ct-log",
@@ -23,13 +50,8 @@ module.exports = {
 		}
 
 		return Promise.all(domains.map((domain) => {
-			// A "*.example.com" pattern queries the base domain. Tolerant: if
-			// crt.sh stays down for a domain, yield no certs rather than failing
-			// the whole flow.
-			return crtsh.search(domain.replace(/^\*\./, "")).catch((error) => {
-				console.error("ct-log: crt.sh failed for " + domain + " — " + error.message);
-				return [];
-			});
+			// A "*.example.com" pattern queries the base domain.
+			return searchWithFallback(domain.replace(/^\*\./, ""));
 		})).then((perDomain) => {
 			const certs = perDomain.reduce((all, batch) => {
 				return all.concat(batch);

@@ -25,6 +25,24 @@ const asn = {
 			const rl = readline.createInterface({ input: socket });
 			const data = {};
 			let malformed = false;
+			let settled = false;
+
+			// Single settle so a socket/readline error can't double-reject, and
+			// swallow the readline 'error' event (otherwise Node throws it as an
+			// unhandled 'error' that bypasses this promise and crashes the run).
+			const done = (error) => {
+				if (settled) { return; }
+				settled = true;
+				socket.destroy();
+
+				if (error) {
+					return reject(error);
+				}
+
+				resolve(data);
+			};
+
+			rl.on("error", done);
 
 			rl.on("line", (line) => {
 				if (line.indexOf("Bulk mode") !== -1) {
@@ -54,15 +72,13 @@ const asn = {
 
 			rl.on("close", () => {
 				if (malformed) {
-					return reject(new Error("Team Cymru returned a malformed line"));
+					return done(new Error("Team Cymru returned a malformed line"));
 				}
 
-				resolve(data);
+				done();
 			});
 
-			socket.on("error", (error) => {
-				reject(error);
-			});
+			socket.on("error", done);
 
 			socket.on("connect", () => {
 				socket.write("begin\nprefix\n" + list.join("\n") + "\nend\n");

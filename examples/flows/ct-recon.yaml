@@ -54,20 +54,6 @@ blocks:
       name: "{{ host.name }}"
     merge_into: host
 
-  # RDAP network owner for the resolved IP. Guarded on its own output so it
-  # fires once, not on every later enrichment (convergence stays cheap).
-  - id: whois
-    uses: rdap
-    for_each: host
-    when:
-      host.ip: { $ne: null }
-      host.network: { $exists: false }
-    inputs:
-      ip: "{{ host.ip }}"
-    merge_into: host
-    rate:
-      max_per_min: 120
-
   # Port scan — fires as soon as the host has an ip, no matter who set it.
   - id: scan
     uses: port.scan
@@ -112,7 +98,21 @@ blocks:
       name: "{{ host.name }}"
     merge_into: host
 
-  # ASN of each ip node (ip entities are auto-materialized from host.ip).
+  # Network owner of each ip node (ip entities are auto-materialized from
+  # host.ip). RDAP over HTTP; ownership lives on the ip node, where it belongs.
+  - id: ip-whois
+    uses: rdap
+    for_each: ip
+    when:
+      ip.network: { $exists: false }
+    inputs:
+      ip: "{{ ip.address }}"
+    merge_into: ip
+    rate:
+      max_per_min: 120
+
+  # ASN of each ip node via Team Cymru (port-43 whois; may be firewalled — the
+  # block is tolerant and simply adds nothing when unreachable).
   - id: ip-asn
     uses: ip.asn
     for_each: ip

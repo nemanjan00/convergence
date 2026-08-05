@@ -15,6 +15,7 @@ const RETRIES = 8;
 const RETRY_DELAY_MS = 3000;
 
 const crtsh = {
+	name: "crt.sh",
 	_client: got,
 
 	// Map crt.sh JSON rows to `cert` entities.
