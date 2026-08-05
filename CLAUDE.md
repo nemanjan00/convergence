@@ -1,7 +1,27 @@
-# recon-flow — agent guide
+# convergence — agent guide
 
 Repeatable agentic recon: an AI composes a declarative YAML flow; a deterministic
-runtime executes it. See `README.md` and `docs/` for the full picture.
+**convergence engine** runs it to a fixpoint (blocks re-run on entity-state
+changes until nothing changes). See `README.md` and `docs/` for the full picture.
+
+## Module layering (dependency rule — keep it clean for parallel work)
+
+Dependencies point DOWNWARD only; this keeps merge collisions low and lets the
+pure layers ship to the frontend:
+
+- **stdlib / pure helpers** (`src/stdlib`, and `src/utils/{ip,subnet,geo,balancer,retry,load,template,envelope}`)
+  — no server or heavy deps; **frontend-shippable**. Must NOT import services or
+  anything that pulls in the mongo driver / ioredis.
+- **node helpers** (`src/utils/{dns-cache,tls-fingerprint,ja3,useragent}`) —
+  node built-ins / browser-data libs; server-side, still no mongo/redis.
+- **services** (`src/services/*`) — may import server/network deps (store→mongo,
+  cache→redis, rdap→rdap server, crtsh→http). The only layer allowed to.
+- **blocks / sources** (`src/blocks/<one-folder-each>`, `src/sources/*`) — use
+  services; each block is its own folder so contributors never collide.
+- **engine** (`src/engine`) — orchestrates: store + registered block handlers.
+
+A guard test (`src/stdlib/__tests__`) fails if stdlib transitively loads a
+server-only dep.
 
 ## Always use the implement-js skill
 

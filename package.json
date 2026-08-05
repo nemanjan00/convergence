@@ -1,7 +1,7 @@
 {
-	"name": "recon-flow",
+	"name": "convergence",
 	"version": "0.0.1",
-	"description": "Repeatable agentic recon: an AI composes the dataflow, a deterministic runtime executes it.",
+	"description": "Convergence: an AI composes a declarative recon dataflow; a deterministic engine runs it to a fixpoint.",
 	"license": "UNLICENSED",
 	"private": true,
 	"scripts": {

@@ -98,6 +98,20 @@ Flows are shared artifacts (YAML in git-like versioning). Entity stores are
 shared (Mongo). Multiple operators + agents work the same investigation without
 stepping on each other. This is a design requirement, not a later feature.
 
+## Module layering (dependency invariant)
+
+Dependencies point **downward only**, so the pure layers stay frontend-shippable
+and parallel contributors rarely collide (each block is its own folder):
+
+1. **stdlib / pure helpers** — `src/stdlib`, `src/utils/{ip,subnet,geo,balancer,retry,load,template,envelope}`. No server/heavy deps; must not import services or anything pulling in the mongo driver / ioredis. Shippable to the browser (e.g. the qrp flow builder can reuse `ip`).
+2. **node helpers** — `src/utils/{dns-cache,tls-fingerprint,ja3,useragent}`. Node built-ins / browser-data libs; server-side, still no mongo/redis.
+3. **services** — `src/services/*`. The only layer allowed to import server/network deps (store→mongo, cache→redis, rdap→rdap, crtsh→http).
+4. **blocks / sources** — `src/blocks/<one-folder-each>`, `src/sources/*`. Use services; one folder per block for collision-free contribution.
+5. **engine** — `src/engine`. Orchestrates store + registered block handlers.
+
+Enforced by a guard test (`src/stdlib/__tests__`) that fails if stdlib
+transitively loads a server-only dependency.
+
 ## Open questions (decide before building)
 
 1. **Block contract wire format** — the exact push/pull envelope + provenance

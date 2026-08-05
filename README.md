@@ -1,7 +1,13 @@
-# recon-flow
+# convergence
 
-Repeatable agentic recon. **An AI composes the dataflow; a deterministic runtime
-executes it.** The AI never runs the conveyor belt — it only designs the machine.
+Repeatable agentic recon. **An AI composes the dataflow; a deterministic engine
+runs it to a fixpoint.** The AI never runs the conveyor belt — it only designs
+the machine.
+
+The name is the execution model: enrichment blocks re-evaluate against each
+entity's current **state** and re-run until nothing changes — so a fact ("port
+50 open", "resolved to this IP") triggers its reactions no matter which of a
+hundred paths discovered it.
 
 ## Why
 
